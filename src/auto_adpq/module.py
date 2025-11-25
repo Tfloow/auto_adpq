@@ -1,5 +1,6 @@
 """Auto ADPQ module."""
 
+
 class Auto_AdpQ:
     """Auto_AdpQ.
 
