@@ -9,7 +9,7 @@ build:
 	@python -m build
 
 coverage:
-	@coverage run -m pytest
+	@coverage run -m pytest -m "not slow"
 	@coverage report -m
 	@coverage html
 

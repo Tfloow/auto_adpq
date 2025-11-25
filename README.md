@@ -59,6 +59,8 @@ users to try first.
 
 ## Running tests & linters
 
+Coverage test: **66%**
+
 - Run tests with pytest:
 
 ```powershell

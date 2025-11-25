@@ -15,9 +15,9 @@ class AutoAdpQConfig(BaseModel):
         BaseModel (): PYDANTIC BASE MODEL.
     """
 
-    group_size: int
-    lambda1: float
-    n_iters: int
+    group_size: int = 128
+    n_iters: int = 100
+    alpha: float = 0.08
     device: str = "cpu"
     q_bit: int = 4
     data_packing: bool = True
@@ -31,9 +31,9 @@ class Auto_AdpQ:
 
     def __init__(
         self,
-        group_size: int,
-        lambda1: float,
-        n_iters: int,
+        group_size: int = 128,
+        alpha: float = 0.06,
+        n_iters: int = 100,
         device: str = "cpu",
         q_bit: int = 4,
         data_packing: bool = True,
@@ -43,7 +43,7 @@ class Auto_AdpQ:
 
         Args:
             group_size (int): the group size.
-            lambda1 (float): the lambda1 parameter.
+            alpha (float): the percentage of outlier.
             n_iters (int): number of iterations.
             device (str, optional): the device to use. Defaults to "cpu".
             q_bit (int, optional): the quantization bit. Defaults to 4.
@@ -59,16 +59,16 @@ class Auto_AdpQ:
             # validate/create config from provided args
             cfg = AutoAdpQConfig(
                 group_size=group_size,
-                lambda1=lambda1,
                 n_iters=n_iters,
                 device=device,
                 q_bit=q_bit,
                 data_packing=data_packing,
+                alpha=alpha,
             )
 
         # assign validated attributes
         self.group_size = cfg.group_size
-        self.lambda1 = cfg.lambda1
+        self.alpha = cfg.alpha
         self.n_iters = cfg.n_iters
         self.device = cfg.device
         self.q_bit = cfg.q_bit
@@ -148,16 +148,59 @@ class Auto_AdpQ:
         return reconstructed
 
     def lasso_outlier_detection(self, matrix):
-        """Lasso outlier detection.
+        r"""Lasso outlier detection.
 
         Detect outliers in the vector using Lasso regression.
+        According to the paper, using the Adaptive LASSO method, it is possible to
+        detect outliers effectively.
+
+        The detection works based on this expression:
+
+        .. math::
+
+            \hat w_i = \text{sign}(w_i)\,\mathrm{ReLU}\left(|w_i| -
+            \frac{\lambda'}{|w_i|}\right)
+
+        If :math:`\hat w_i` is zero, then :math:`w_i` is considered an outlier.
+        So we can tweak the formula to find the outlier indices such that:
+        :math:`max(0, |w_i| - \frac{\lambda'}{|w_i|})` and we sum up all values from
+        the matrix.
 
         Args:
             matrix (numpy.ndarray): the input matrix.
+
+        Returns:
+            list[int]: the indices of the outliers.
+            float: the ratio of outliers in the matrix.
         """
         lambda_prime = 1e5
-        
-        raise NotImplementedError("Lasso outlier detection is not implemented yet.")
+        ite = 0
+        n_item = matrix.size
+        n_outlier = n_item
+
+        while (n_outlier / n_item) > self.alpha and ite < self.n_iters:
+            # print(f"Iteration {ite}: Outlier ratio = {n_outlier / n_item}")
+            ite += 1
+            outlier_indices = []
+            n_outlier = 0
+
+            for i in range(n_item):
+                value = matrix[i // matrix.shape[1], i % matrix.shape[1]]
+                adjusted_value = max(0, abs(value) - (lambda_prime / abs(value)))
+                if adjusted_value == 0:
+                    outlier_indices.append(i)
+                    n_outlier += 1
+
+            # dummy update to lambda_prime for next iteration
+            lambda_prime *= 0.1
+
+        if ite == self.n_iters:
+            Warning(
+                "Warning: Lasso outlier detection did not converge\
+                within max iterations."
+            )
+
+        return outlier_indices, n_outlier / n_item
 
     def lasso_quantization(self, vector):
         """Lasso quantization.
