@@ -23,7 +23,8 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "torch",
-    "scikit-learn"
+    "scikit-learn",
+    "pydantic>=1.10"
 ]
 
 [project.optional-dependencies]
@@ -31,7 +32,9 @@ dev = [
     "pytest",
     "coverage",
     "build",
-    "ruff"
+    "ruff",
+    "sphinx",
+    "furo"
 ]
 
 [tool.pytest.ini_options]

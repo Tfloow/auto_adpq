@@ -1,0 +1,17 @@
+/* Custom Sphinx static CSS for auto_adpq docs */
+
+/* Slightly reduce the top banner size in the RTD theme */
+.wy-nav-top {
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+/* Make code blocks a bit larger and more readable */
+pre, .highlight {
+  font-size: 0.95rem;
+}
+
+/* Custom accent color */
+:root {
+  --rtk-color-brand: #0066cc;
+}
