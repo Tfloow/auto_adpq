@@ -34,7 +34,8 @@ dev = [
     "build",
     "ruff",
     "sphinx",
-    "furo"
+    "furo",
+    "twine"
 ]
 
 [tool.pytest.ini_options]
