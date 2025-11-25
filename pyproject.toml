@@ -23,11 +23,20 @@ readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "torch",
-    "scikit-learn",
+    "scikit-learn"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
     "coverage",
     "build",
-    "ruff",
-    "pytest"
+    "ruff"
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests"
 ]
 
 # ====================================================================
