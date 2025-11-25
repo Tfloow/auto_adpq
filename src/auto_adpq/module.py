@@ -95,6 +95,7 @@ class Auto_AdpQ:
 
         Args:
             quantized_vectors (list[numpy.ndarray]): the quantized sub-vector.
+                                        pass first non-outliers, then outliers.
             outlier_indices (list[int]): the indices of the outliers.
         """
         if self.data_packing and self.q_bit % 2:
@@ -145,3 +146,84 @@ class Auto_AdpQ:
                 reconstructed[i] = to_be_assigned
 
         return reconstructed
+
+    def lasso_outlier_detection(self, matrix):
+        """Lasso outlier detection.
+
+        Detect outliers in the vector using Lasso regression.
+
+        Args:
+            matrix (numpy.ndarray): the input matrix.
+        """
+        lambda_prime = 1e5
+        
+        raise NotImplementedError("Lasso outlier detection is not implemented yet.")
+
+    def lasso_quantization(self, vector):
+        """Lasso quantization.
+
+        Quantize the vector using Lasso regression.
+
+        Args:
+            vector (numpy.ndarray): the input vector.
+        """
+        outlier_index = self.lasso_outlier_detection(vector)
+
+        outlier_vector = vector[outlier_index]
+        non_outlier_vector = np.delete(vector, outlier_index)
+
+        # Quantize non-outlier vector
+        quantized_non_outlier, _ = self.quantize(non_outlier_vector)
+        quantized_outlier, _ = self.quantize(outlier_vector)
+
+        # Reconstruct quantized vectors
+        quantized_vectors = (quantized_non_outlier, quantized_outlier)
+        return self.reconstruct_vector(quantized_vectors, outlier_index)
+
+    def quantize_weight_matrix(self, weight_matrix):
+        """Quantize weight matrix.
+
+        Quantize the weight matrix using group quantization.
+
+        Args:
+            weight_matrix (numpy.ndarray): the weight matrix to quantize.
+        """
+        ite = weight_matrix.size // self.group_size
+        if weight_matrix.size % self.group_size != 0:
+            ite += 1  # account for remaining elements
+
+        if weight_matrix.shape[1] % self.group_size != 0:
+            raise ValueError(
+                "Weight matrix columns must be divisible by group_size.\
+                \n TODO: handle remaining elements."
+            )
+
+        if self.data_packing:
+            amount_per_int32 = 32 // self.q_bit
+            quantized_matrix = np.zeros(
+                (
+                    weight_matrix.shape[0],
+                    weight_matrix.shape[1] // amount_per_int32 + 1,
+                ),
+                dtype=np.int32,
+            )
+        else:
+            quantized_matrix = np.zeros(weight_matrix.shape, dtype=np.int8)
+
+        for i in range(ite):
+            # determine position in quantized_matrix
+            m_idx = (i * self.group_size) // weight_matrix.shape[1]
+            n_idx = (i * self.group_size) % weight_matrix.shape[0]
+
+            sub_vector = weight_matrix[m_idx, n_idx : n_idx + self.group_size]
+            quantized_sub_vector, _ = self.quantize(sub_vector)
+
+            # Handle data packing index adjustment
+            if self.data_packing:
+                n_idx = (
+                    (i * self.group_size) % weight_matrix.shape[1]
+                ) // amount_per_int32
+
+            quantized_matrix[m_idx, n_idx : n_idx + len(quantized_sub_vector)] = (
+                quantized_sub_vector
+            )

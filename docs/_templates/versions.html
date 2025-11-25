@@ -1,0 +1,10 @@
+{% if smv_refs %}
+<div class="smv-version-selector" style="padding:0.5rem 1rem;">
+  <label for="smv-select" style="display:block;font-weight:600;margin-bottom:0.25rem">Version</label>
+  <select id="smv-select" onchange="if(this.value){ window.location.href=this.value; }" style="width:100%;">
+    {% for ref in smv_refs %}
+      <option value="{{ pathto(ref.path) }}"{% if ref.name == smv_current_ref.name %} selected{% endif %}>{{ ref.name }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}

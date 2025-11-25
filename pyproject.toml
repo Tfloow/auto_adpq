@@ -1,16 +1,11 @@
-# ====================================================================
-# [tool.poetry] or [project] - Standard Package Metadata
-# ====================================================================
-
-# If you are using setuptools/standard packaging (PEP 621):
 [project]
 name = "auto_adpq"
-version = "0.1.5"
+version = "0.1.6"
 description = "Implementing auto adpq"
 authors = [
     {name = "Tfloow", email = "88899420+Tfloow@users.noreply.github.com"}
 ]
-license = {text = "MIT"}
+license = {text = "APACHE 2.0"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -26,6 +21,7 @@ dev = [
     "build",
     "ruff",
     "sphinx",
+    "sphinx-multiversion",
     "furo",
     "twine"
 ]
@@ -66,12 +62,6 @@ src = [
 
 # Enable autofixing for certain rules.
 fix = true
-
-# Configuration for the 'isort' import sorting
-[tool.ruff.lint.isort]
-# Sort imports into 'future', 'standard library', 'third party', and 'local folder' sections.
-known-third-party = ["requests", "numpy"] # Add your external dependencies here
-
 
 [tool.ruff.lint.pydocstyle]
 convention="google"

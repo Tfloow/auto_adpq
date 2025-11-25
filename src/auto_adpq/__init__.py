@@ -10,7 +10,7 @@ A brief description of what your package does.
 from .module import Auto_AdpQ
 
 # Define the package version
-__version__ = "0.1.2"
+__version__ = "0.1.6"
 
 # List of names to expose when a user does `from auto_adpq import *`
 __all__ = ["Auto_AdpQ", "__version__"]
