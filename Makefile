@@ -8,14 +8,24 @@ ruff:
 build:
 	@python -m build
 
+test:
+	@pytest -q -m "not slow"
+
 coverage:
-	@coverage run -m pytest -m "not slow"
+	@coverage run -m pytest -q -m "not slow"
 	@coverage report -m
 	@coverage html
+
+profiling:
+	@python -m cProfile -o profile.out -m pytest -m "not slow"
+	@snakeviz profile.out
 
 .PHONY: docs
 docs:
 	@python -m sphinx -b html docs docs/_build/html
+
+.PHONY: docs-mv
+docs-mv: docs
 	@sphinx-multiversion docs docs/_build/html-mv
 
 clean:

@@ -1,8 +1,12 @@
 """Auto ADPQ module."""
 
-from typing import Optional
+from __future__ import annotations
+
+from typing import Optional, Union
 
 import numpy as np
+import warnings
+import torch
 from pydantic import BaseModel
 
 
@@ -12,7 +16,16 @@ class AutoAdpQConfig(BaseModel):
     defines the basic configuration for the class auto ADPQ
 
     Args:
-        BaseModel (): PYDANTIC BASE MODEL.
+        group_size (int): the group size.
+        n_iters (int): number of iterations.
+        alpha (float): the percentage of outlier.
+        device (str, optional): the device to use. Defaults to "cpu".
+        q_bit (int, optional): the quantization bit. Defaults to 4.
+        data_packing (bool, optional): whether to use data packing.
+                                        Defaults to True.
+        symmetrical_quantization (bool, optional): whether to use symmetrical
+                                                   quantization.
+                                                   Defaults to True.
     """
 
     group_size: int = 128
@@ -21,6 +34,76 @@ class AutoAdpQConfig(BaseModel):
     device: str = "cpu"
     q_bit: int = 4
     data_packing: bool = True
+    symmetrical_quantization: bool = True
+
+    def __init__(self, **kwargs):
+        """Init ADPQ config.
+
+        Raises:
+            ValueError: if the group_size is not between 1 and 65536.
+            ValueError: if n_iters is not positive.
+        """
+        super().__init__(**kwargs)
+        if self.group_size <= 0:
+            raise ValueError("group_size must be a positive integer.")
+        if self.n_iters <= 0:
+            raise ValueError("n_iters must be a positive integer.")
+        if self.group_size > 2**16:
+            raise ValueError("group_size too large, must be less than 65536.")
+
+
+class AdpQQuantizedWeights(BaseModel):
+    """AdpQ Quantized weights Config.
+
+    defines the configuration for a sub-vector in AdpQ.
+
+    Args:
+        scale (float): the scale used for quantization.
+        zeropoint (Optional[float]): the zero point used for quantization.
+            only needed for asymmetric quantization. Defaults to None.
+        quantized_vector (list[int]): the quantized sub-vector.
+        scale_outlier (list[float]): scale for outlier.
+        zeropoint_outlier (Optional[float], optional): zero point for outlier.
+                                                Defaults to None.
+        quantized_vector_outlier (list[int]): quantized sub-vector for outlier.
+        outlier_indices (list[int]): indices of outliers.
+    """
+
+    group_num: int
+    scale: Union[list[float], np.ndarray]
+    zeropoint: Optional[Union[list[float], np.ndarray]] = None
+    quantized_vector: Union[list[list[int]], np.ndarray]
+    # For the outlier
+    scale_outlier: Union[list[float], np.ndarray]
+    zeropoint_outlier: Optional[Union[list[float], np.ndarray]] = None
+    quantized_vector_outlier: Union[list[list[int]], np.ndarray]
+    outlier_indices: Union[list[list[int]], np.ndarray]
+    
+    class Config:
+        """Pydantic config."""
+
+        arbitrary_types_allowed = True
+
+    # Force each list to be same length as group_num
+    def __init__(self, **data):
+        """Init.
+
+        Raises:
+            ValueError: if the length of any list is not equal to group_num.
+        """
+        super().__init__(**data)
+        if len(self.scale) != self.group_num:
+            raise ValueError("Length of scale must be equal to group_num.")
+        if len(self.zeropoint) != self.group_num:
+            raise ValueError("Length of zeropoint must be equal to group_num.")
+        if len(self.quantized_vector) != self.group_num:
+            raise ValueError("Length of quantized_vector must be equal to group_num.")
+        if len(self.scale_outlier) != self.group_num:
+            raise ValueError("Length of scale_outlier must be equal to group_num.")
+        if len(self.zeropoint_outlier) != self.group_num:
+            raise ValueError("Length of zeropoint_outlier must be equal to group_num.")
+        if len(self.outlier_indices) != self.group_num:
+            raise ValueError("Length of outlier_indices must be equal to group_num.")
 
 
 class Auto_AdpQ:
@@ -37,6 +120,7 @@ class Auto_AdpQ:
         device: str = "cpu",
         q_bit: int = 4,
         data_packing: bool = True,
+        symmetrical_quantization: bool = True,
         config: Optional[AutoAdpQConfig] = None,
     ):
         """Init AutoADPQ.
@@ -49,6 +133,9 @@ class Auto_AdpQ:
             q_bit (int, optional): the quantization bit. Defaults to 4.
             data_packing (bool, optional): whether to use data packing.
                                             Defaults to True.
+            symmetrical_quantization (bool, optional): whether to use symmetrical
+                                                         quantization.
+                                                         Defaults to True.
             config (Optional[AutoAdpQConfig], optional): Pydantic config object.
                                                         Defaults to None.
         """
@@ -64,31 +151,66 @@ class Auto_AdpQ:
                 q_bit=q_bit,
                 data_packing=data_packing,
                 alpha=alpha,
+                symmetrical_quantization=symmetrical_quantization,
             )
 
+        # Validate group_size and set outlier index format
+        self.outlier_index_format = np.int8
+        if cfg.group_size > 2**8:
+            warnings.warn(
+                "group_size is large, will have larger memory overhead."
+                " Consider using a 128 group_size for better performance.",
+                UserWarning,
+            )
+            self.outlier_index_format = np.int16
+
         # assign validated attributes
+        self.cfg = cfg
         self.group_size = cfg.group_size
         self.alpha = cfg.alpha
         self.n_iters = cfg.n_iters
         self.device = cfg.device
         self.q_bit = cfg.q_bit
         self.data_packing = cfg.data_packing
+        self.symmetrical_quantization = cfg.symmetrical_quantization
 
-    def quantize(self, sub_vector):
+    def quantize(
+        self, sub_vector: Union[list[float], np.ndarray, torch.Tensor]
+    ) -> tuple[np.ndarray, float, float]:
         """Quantize.
 
         quantize a sub-vector from a group quantization.
 
         Args:
             sub_vector (numpy.ndarray): the sub-vector to quantize.
+
+        Returns:
+            numpy.ndarray: the quantized sub-vector.
+            float: the scale used for quantization.
+            float: the zero point used for quantization.
         """
-        max_value = np.max(np.abs(sub_vector))
-        Delta = max_value / (2 ** (self.q_bit - 1) - 1)
-        quantized = np.round(sub_vector / Delta)
+        if self.symmetrical_quantization:
+            # Symmetrical quantization
+            max_abs = np.max(np.abs(sub_vector))
+            scale = (2 ** (self.q_bit - 1) - 1) / max_abs
+            zeropoint = np.nan  # not used in symmetrical quantization
+            quantized = np.round(scale * sub_vector).astype(np.int8)
+            
+            print(f"Symmetrical Quantizatiokjhkjn: max_abs={max_abs}, scale={scale}")
+        else:
+            scale = (2**self.q_bit - 1) / (np.max(sub_vector) - np.min(sub_vector))
+            zeropoint = -np.round(np.min(sub_vector) * scale) - 2 ** (self.q_bit - 1)
+            quantized = np.round(scale * sub_vector + zeropoint).astype(np.int8)
 
-        return quantized, Delta
+        # Store in FP16
+        scale = np.float16(scale)
+        zeropoint = np.float16(zeropoint)
 
-    def reconstruct_vector(self, quantized_vectors, outlier_indices):
+        return quantized, scale, zeropoint
+
+    def reconstruct_vector(
+        self, quantized_vectors: list[np.ndarray], outlier_indices: list[int]
+    ) -> np.ndarray:
         """Reconstruct quantized.
 
         Reconstruct the quantized sub-vector.
@@ -97,6 +219,10 @@ class Auto_AdpQ:
             quantized_vectors (list[numpy.ndarray]): the quantized sub-vector.
                                         pass first non-outliers, then outliers.
             outlier_indices (list[int]): the indices of the outliers.
+
+        TODO: since we have a sparsity of outlier around 95% depending on the
+        alpha parameter, we can optimize this function further by using a CSR
+        representation for the outlier vector.
         """
         if self.data_packing and self.q_bit % 2:
             raise ValueError("Data packing is only supported for even q_bit values.")
@@ -147,7 +273,9 @@ class Auto_AdpQ:
 
         return reconstructed
 
-    def lasso_outlier_detection(self, matrix):
+    def lasso_outlier_detection(
+        self, matrix: Union[list[float], np.ndarray, torch.Tensor]
+    ) -> tuple[np.ndarray, float]:
         r"""Lasso outlier detection.
 
         Detect outliers in the vector using Lasso regression.
@@ -170,60 +298,128 @@ class Auto_AdpQ:
             matrix (numpy.ndarray): the input matrix.
 
         Returns:
-            list[int]: the indices of the outliers.
+            np.ndarray: the indices of the outliers given
+            in relative group value.
+                e.g., if group_size=4 and outlier indices are [[],[1,3],[]],
             float: the ratio of outliers in the matrix.
         """
         lambda_prime = 1e5
         ite = 0
         n_item = matrix.size
         n_outlier = n_item
+        num_groups = (n_item + self.group_size - 1) // self.group_size
 
         while (n_outlier / n_item) > self.alpha and ite < self.n_iters:
             # print(f"Iteration {ite}: Outlier ratio = {n_outlier / n_item}")
             ite += 1
-            outlier_indices = []
+            outlier_indices = -np.ones(
+                (num_groups, self.group_size), dtype=self.outlier_index_format
+            )
             n_outlier = 0
+
+            i_group = 0
+            index_in_group = 0
 
             for i in range(n_item):
                 value = matrix[i // matrix.shape[1], i % matrix.shape[1]]
                 adjusted_value = max(0, abs(value) - (lambda_prime / abs(value)))
+                
+                # Found an outlier
                 if adjusted_value == 0:
-                    outlier_indices.append(i)
+                    outlier_indices[i_group, index_in_group] = i % self.group_size
                     n_outlier += 1
+                    index_in_group += 1
+
+                # Move to next group if needed
+                if (i + 1) % self.group_size == 0:
+                    i_group += 1
+                    index_in_group = 0
 
             # dummy update to lambda_prime for next iteration
-            lambda_prime *= 0.1
+            lambda_prime *= 0.55
 
         if ite == self.n_iters:
-            Warning(
-                "Warning: Lasso outlier detection did not converge\
-                within max iterations."
+            warnings.warn(
+                "Lasso outlier detection did not converge within max iterations.",
+                UserWarning,
             )
 
         return outlier_indices, n_outlier / n_item
 
-    def lasso_quantization(self, vector):
-        """Lasso quantization.
+    def AdpQ_quantize(
+        self, matrix: Union[list[float], np.ndarray, torch.Tensor]
+    ) -> AdpQQuantizedWeights:
+        """Lasso based quantization.
 
-        Quantize the vector using Lasso regression.
+        Quantize the matrix using Lasso regression.
 
         Args:
-            vector (numpy.ndarray): the input vector.
+            matrix (numpy.ndarray): the input matrix.
         """
-        outlier_index = self.lasso_outlier_detection(vector)
+        outlier_indices, alpha = self.lasso_outlier_detection(matrix)
+        print(f"Detected outlier ratio: {alpha}")
 
-        outlier_vector = vector[outlier_index]
-        non_outlier_vector = np.delete(vector, outlier_index)
+        original_shape = matrix.shape
+        matrix = matrix.reshape((-1, self.group_size))
 
-        # Quantize non-outlier vector
-        quantized_non_outlier, _ = self.quantize(non_outlier_vector)
-        quantized_outlier, _ = self.quantize(outlier_vector)
+        # Create bitmask for non-outlier and outlier elements
+        non_outlier_mask = np.ones(matrix.shape, dtype=bool)
+        for group_idx in range(outlier_indices.shape[0]):
+            for outlier_idx in outlier_indices[group_idx]:
+                if outlier_idx != -1 and outlier_idx < self.group_size:
+                    non_outlier_mask[group_idx, outlier_idx] = False
+                else:
+                    warnings.warn(
+                        f"Outlier index exceeds group size; skipping this index for"
+                        f" group {group_idx}, index {outlier_idx}",
+                        UserWarning,
+                    )
 
-        # Reconstruct quantized vectors
-        quantized_vectors = (quantized_non_outlier, quantized_outlier)
-        return self.reconstruct_vector(quantized_vectors, outlier_index)
+        outlier_weight = matrix.copy()
+        outlier_weight[non_outlier_mask] = 0
+        
+        non_outlier_weight = matrix.copy()
+        non_outlier_weight[~non_outlier_mask] = 0
+        
+        print("Weights to separation")
+        print(outlier_indices)
+        print(outlier_weight)
+        print(non_outlier_weight)
 
-    def quantize_weight_matrix(self, weight_matrix):
+        # Quantize non-outlier and outlier weights separately
+        num_groups = matrix.shape[0]
+        scales = np.zeros((num_groups,), dtype=np.float16)
+        zeropoints = np.zeros((num_groups,), dtype=np.float16) if not self.symmetrical_quantization else None
+        quantized_non_outlier = []
+        
+        for group_idx in range(num_groups):
+            quantized_non_outlier, scale, zeropoint = self.quantize(non_outlier_weight[group_idx])
+            quantized_outlier, scale_outlier, zeropoint_outlier = self.quantize(
+                outlier_weight[group_idx]
+            )
+            print(f"Group {group_idx}:")
+            print(quantized_non_outlier)
+            print(scale, zeropoint)
+            
+        print(type(quantized_non_outlier))
+        print(type(quantized_outlier))
+        
+        return AdpQQuantizedWeights(
+            group_num=num_groups,
+            scale=scale,
+            zeropoint=zeropoint if not self.symmetrical_quantization else None,
+            quantized_vector=quantized_non_outlier,
+            scale_outlier=scale_outlier,
+            zeropoint_outlier=zeropoint_outlier
+            if not self.symmetrical_quantization
+            else None,
+            outlier_indices=outlier_indices,
+            quantized_vector_outlier=quantized_outlier,
+        )
+
+    def quantize_weight_matrix(
+        self, weight_matrix: Union[list[float], np.ndarray, torch.Tensor]
+    ) -> np.ndarray:
         """Quantize weight matrix.
 
         Quantize the weight matrix using group quantization.
