@@ -12,7 +12,8 @@ multi-version docs), and contribute.
   - [Installation](#installation)
   - [Quick usage](#quick-usage)
   - [Running tests \& linters](#running-tests--linters)
-  - [Building the documentation](#building-the-documentation)
+  - [Documentation](#documentation)
+    - [Building the documentation](#building-the-documentation)
   - [Contributing](#contributing)
   - [Development notes](#development-notes)
   - [License](#license)
@@ -79,7 +80,11 @@ make coverage
 make ruff
 ```
 
-## Building the documentation
+## Documentation
+
+The documentation lives [here](docs\_build\html\index.html)
+
+### Building the documentation
 
 This project uses Sphinx for documentation. There are two common workflows:
 
