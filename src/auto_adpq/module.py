@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Optional, Union
 
 import numpy as np
-import warnings
 import torch
 from pydantic import BaseModel
 
@@ -78,7 +78,7 @@ class AdpQQuantizedWeights(BaseModel):
     zeropoint_outlier: Optional[Union[list[float], np.ndarray]] = None
     quantized_vector_outlier: Union[list[list[int]], np.ndarray]
     outlier_indices: Union[list[list[int]], np.ndarray]
-    
+
     class Config:
         """Pydantic config."""
 
@@ -195,7 +195,7 @@ class Auto_AdpQ:
             scale = (2 ** (self.q_bit - 1) - 1) / max_abs
             zeropoint = np.nan  # not used in symmetrical quantization
             quantized = np.round(scale * sub_vector).astype(np.int8)
-            
+
             print(f"Symmetrical Quantizatiokjhkjn: max_abs={max_abs}, scale={scale}")
         else:
             scale = (2**self.q_bit - 1) / (np.max(sub_vector) - np.min(sub_vector))
@@ -295,7 +295,8 @@ class Auto_AdpQ:
         the matrix.
 
         Args:
-            matrix (numpy.ndarray): the input matrix.
+            matrix (numpy.ndarray): the input matrix. already arrange per group
+                                    (N, group_size).
 
         Returns:
             np.ndarray: the indices of the outliers given
@@ -307,33 +308,30 @@ class Auto_AdpQ:
         ite = 0
         n_item = matrix.size
         n_outlier = n_item
-        num_groups = (n_item + self.group_size - 1) // self.group_size
+        num_groups = matrix.shape[0]
 
         while (n_outlier / n_item) > self.alpha and ite < self.n_iters:
             # print(f"Iteration {ite}: Outlier ratio = {n_outlier / n_item}")
             ite += 1
-            outlier_indices = -np.ones(
-                (num_groups, self.group_size), dtype=self.outlier_index_format
-            )
+            outlier_indices = -np.ones_like(matrix, dtype=self.outlier_index_format)
             n_outlier = 0
 
-            i_group = 0
-            index_in_group = 0
+            for i in range(num_groups):
+                group_vector = matrix[i]
+                adjusted_value = np.abs(group_vector) - (
+                    lambda_prime / np.abs(group_vector)
+                )
 
-            for i in range(n_item):
-                value = matrix[i // matrix.shape[1], i % matrix.shape[1]]
-                adjusted_value = max(0, abs(value) - (lambda_prime / abs(value)))
-                
-                # Found an outlier
-                if adjusted_value == 0:
-                    outlier_indices[i_group, index_in_group] = i % self.group_size
-                    n_outlier += 1
-                    index_in_group += 1
+                # Find the one that are above zero = Outliers
+                outliers = adjusted_value > 0
 
-                # Move to next group if needed
-                if (i + 1) % self.group_size == 0:
-                    i_group += 1
-                    index_in_group = 0
+                # Find indices where outliers == 1
+                outlier_index = outliers.nonzero()[0]
+
+                outlier_indices[i, : len(outlier_index)] = outlier_index.astype(
+                    self.outlier_index_format
+                )
+                n_outlier += len(outlier_index)
 
             # dummy update to lambda_prime for next iteration
             lambda_prime *= 0.55
@@ -356,11 +354,11 @@ class Auto_AdpQ:
         Args:
             matrix (numpy.ndarray): the input matrix.
         """
-        outlier_indices, alpha = self.lasso_outlier_detection(matrix)
-        print(f"Detected outlier ratio: {alpha}")
-
         original_shape = matrix.shape
         matrix = matrix.reshape((-1, self.group_size))
+
+        outlier_indices, alpha = self.lasso_outlier_detection(matrix)
+        print(f"Detected outlier ratio: {alpha}")
 
         # Create bitmask for non-outlier and outlier elements
         non_outlier_mask = np.ones(matrix.shape, dtype=bool)
@@ -377,10 +375,10 @@ class Auto_AdpQ:
 
         outlier_weight = matrix.copy()
         outlier_weight[non_outlier_mask] = 0
-        
+
         non_outlier_weight = matrix.copy()
         non_outlier_weight[~non_outlier_mask] = 0
-        
+
         print("Weights to separation")
         print(outlier_indices)
         print(outlier_weight)
@@ -389,21 +387,27 @@ class Auto_AdpQ:
         # Quantize non-outlier and outlier weights separately
         num_groups = matrix.shape[0]
         scales = np.zeros((num_groups,), dtype=np.float16)
-        zeropoints = np.zeros((num_groups,), dtype=np.float16) if not self.symmetrical_quantization else None
+        zeropoints = (
+            np.zeros((num_groups,), dtype=np.float16)
+            if not self.symmetrical_quantization
+            else None
+        )
         quantized_non_outlier = []
-        
+
         for group_idx in range(num_groups):
-            quantized_non_outlier, scale, zeropoint = self.quantize(non_outlier_weight[group_idx])
+            quantized_non_outlier, scale, zeropoint = self.quantize(
+                non_outlier_weight[group_idx]
+            )
             quantized_outlier, scale_outlier, zeropoint_outlier = self.quantize(
                 outlier_weight[group_idx]
             )
             print(f"Group {group_idx}:")
             print(quantized_non_outlier)
             print(scale, zeropoint)
-            
+
         print(type(quantized_non_outlier))
         print(type(quantized_outlier))
-        
+
         return AdpQQuantizedWeights(
             group_num=num_groups,
             scale=scale,
