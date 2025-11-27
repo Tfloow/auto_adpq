@@ -1,11 +1,11 @@
 [project]
 name = "auto_adpq"
-version = "0.1.6"
+version = "0.2.0"
 description = "Implementing auto adpq"
 authors = [
     {name = "Tfloow", email = "88899420+Tfloow@users.noreply.github.com"}
 ]
-license = {text = "APACHE 2.0"}
+license="Apache-2.0"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

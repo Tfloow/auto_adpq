@@ -10,7 +10,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 debug_enabled = os.getenv("AUTO_ADPQ_DEBUG", "0") == "1"
 if debug_enabled:
@@ -74,31 +74,27 @@ class AdpQQuantizedWeights(BaseModel):
     defines the configuration for a sub-vector in AdpQ.
 
     Args:
+        original_shape (Optional[tuple[int, ...]]): the original shape of the matrix
+        group_num (int): number of groups.
         scale (float): the scale used for quantization.
+            has dimension (group_num, 2).
         zeropoint (Optional[float]): the zero point used for quantization.
             only needed for asymmetric quantization. Defaults to None.
+            has dimension (group_num, 2).
         quantized_vector (list[int]): the quantized sub-vector.
-        scale_outlier (list[float]): scale for outlier.
-        zeropoint_outlier (Optional[float], optional): zero point for outlier.
-                                                Defaults to None.
-        quantized_vector_outlier (list[int]): quantized sub-vector for outlier.
+            has dimension (group_num, group_size).
         outlier_indices (list[int]): indices of outliers.
+            has dimensions (group_num, variable length).
     """
 
+    original_shape: Optional[tuple[int, ...]] = None
     group_num: int
     scale: Union[list[float], np.ndarray]
     zeropoint: Optional[Union[list[float], np.ndarray]] = None
     quantized_vector: Union[list[list[int]], np.ndarray]
     # For the outlier
-    scale_outlier: Union[list[float], np.ndarray]
-    zeropoint_outlier: Optional[Union[list[float], np.ndarray]] = None
-    quantized_vector_outlier: Union[list[list[int]], np.ndarray]
     outlier_indices: Union[list[list[int]], np.ndarray]
-
-    class Config:
-        """Pydantic config."""
-
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # Force each list to be same length as group_num
     def __init__(self, **data):
@@ -110,14 +106,10 @@ class AdpQQuantizedWeights(BaseModel):
         super().__init__(**data)
         if len(self.scale) != self.group_num:
             raise ValueError("Length of scale must be equal to group_num.")
-        if len(self.zeropoint) != self.group_num:
+        if self.zeropoint is not None and len(self.zeropoint) != self.group_num:
             raise ValueError("Length of zeropoint must be equal to group_num.")
         if len(self.quantized_vector) != self.group_num:
             raise ValueError("Length of quantized_vector must be equal to group_num.")
-        if len(self.scale_outlier) != self.group_num:
-            raise ValueError("Length of scale_outlier must be equal to group_num.")
-        if len(self.zeropoint_outlier) != self.group_num:
-            raise ValueError("Length of zeropoint_outlier must be equal to group_num.")
         if len(self.outlier_indices) != self.group_num:
             raise ValueError("Length of outlier_indices must be equal to group_num.")
 
@@ -384,7 +376,7 @@ class Auto_AdpQ:
             float: the ratio of outliers in the matrix.
         """
         x0 = 0.0
-        x1 = 1e9
+        x1 = 1e7
 
         # Previous points
         _, prev_n_outlier = self._optimization_function(matrix, x0)
@@ -415,6 +407,7 @@ class Auto_AdpQ:
         # 0.5% tolerance based on target outlier
         # tol = 0.005 * target_outlier
         tolerance = 1e-5
+        tolerance_outliers = 1e-3 * target_outlier
 
         d = None
 
@@ -426,6 +419,17 @@ class Auto_AdpQ:
             fx0 = fx0 - target_outlier
             fx1 = fx1 - target_outlier
             fx2 = fx2 - target_outlier
+
+            # Check if any function value is within tolerance
+            if abs(fx0) < tolerance_outliers:
+                new = x0
+                break
+            if abs(fx1) < tolerance_outliers:
+                new = x1
+                break
+            if abs(fx2) < tolerance_outliers:
+                new = x2
+                break
 
             logger.debug(
                 f"Iteration {ite}: x0={x0}, fx0={fx0}, x1={x1}, fx1={fx1},\
@@ -441,6 +445,8 @@ class Auto_AdpQ:
             # fx1 - fx0 == 0 all of sudden
             elif (fx1 - fx0) == 0 and fx1 == 0:
                 new = x1
+            elif (fx1 - fx0) == 0:
+                new = x0
             else:
                 new = x1 - ((fx1 * (x1 - x0)) / (fx1 - fx0))
 
@@ -503,15 +509,17 @@ class Auto_AdpQ:
         non_outlier_mask = np.ones(matrix.shape, dtype=bool)
         for group_idx in range(outlier_indices.shape[0]):
             for outlier_idx in outlier_indices[group_idx]:
-                if outlier_idx != -1 and outlier_idx < self.group_size:
+                if outlier_idx == -1:
+                    break
+                if outlier_idx < self.group_size:
                     non_outlier_mask[group_idx, outlier_idx] = False
-                else:
+                """else:
                     warnings.warn(
                         f"Outlier index exceeds group size; skipping this index for"
                         f" group {group_idx}, index {outlier_idx}",
                         UserWarning,
                         stacklevel=2,
-                    )
+                    )"""
 
         outlier_weight = matrix.copy()
         outlier_weight[non_outlier_mask] = 0
@@ -520,50 +528,71 @@ class Auto_AdpQ:
         non_outlier_weight[~non_outlier_mask] = 0
 
         logger.debug("Weights to separation")
+        logger.debug(non_outlier_mask)
         logger.debug(outlier_indices)
         logger.debug(outlier_weight)
         logger.debug(non_outlier_weight)
 
-        # Quantize non-outlier and outlier weights separately
         num_groups = matrix.shape[0]
-        scales = np.zeros((num_groups,), dtype=np.float16)
+
+        # Initialize storage for quantized values
+        scales = np.empty((num_groups, 2), dtype=np.float16)
         zeropoints = (
-            np.zeros((num_groups,), dtype=np.float16)
+            np.empty((num_groups, 2), dtype=np.float16)
             if not self.symmetrical_quantization
             else None
         )
-        # To be removed, just to pass linter
-        del scales
-        del zeropoints
-        del original_shape
-
-        quantized_non_outlier = []
+        quantized_values = np.empty_like(non_outlier_weight, dtype=np.int8)
 
         for group_idx in range(num_groups):
+            logger.debug(f"Group {group_idx}:")
             quantized_non_outlier, scale, zeropoint = self.quantize(
                 non_outlier_weight[group_idx]
             )
-            quantized_outlier, scale_outlier, zeropoint_outlier = self.quantize(
-                outlier_weight[group_idx]
-            )
-            logger.debug(f"Group {group_idx}:")
+            logger.debug("Quantized non-outlier:")
             logger.debug(quantized_non_outlier)
-            logger.debug(scale, zeropoint)
+            logger.debug(scale)
+            logger.debug(zeropoint)
 
-        logger.debug(type(quantized_non_outlier))
-        logger.debug(type(quantized_outlier))
+            if outlier_indices[group_idx, 0] == -1:
+                # No outliers in this group
+                quantized_outlier = np.zeros(
+                    (quantized_values.shape[1],), dtype=np.int8
+                )
+                scale_outlier = np.float16(0.0)
+                zeropoint_outlier = (
+                    np.float16(0.0) if not self.symmetrical_quantization else None
+                )
+            else:
+                logger.debug(f"Quantizing outliers for group {group_idx}:")
+                quantized_outlier, scale_outlier, zeropoint_outlier = self.quantize(
+                    outlier_weight[group_idx]
+                )
+            logger.debug("Quantized outlier:")
+            logger.debug(quantized_outlier)
+            logger.debug(scale_outlier)
+            logger.debug(zeropoint_outlier)
+
+            # Save results
+            scales[group_idx, 0] = scale
+            scales[group_idx, 1] = scale_outlier
+            if not self.symmetrical_quantization:
+                zeropoints[group_idx, 0] = zeropoint
+                zeropoints[group_idx, 1] = zeropoint_outlier
+            quantized_values[group_idx, :] = quantized_non_outlier + quantized_outlier
+
+        logger.debug(type(num_groups))
+        logger.debug(type(scales))
+        logger.debug(type(zeropoints))
+        logger.debug(type(quantized_values))
 
         return AdpQQuantizedWeights(
+            original_shape=original_shape,
             group_num=num_groups,
-            scale=scale,
-            zeropoint=zeropoint if not self.symmetrical_quantization else None,
-            quantized_vector=quantized_non_outlier,
-            scale_outlier=scale_outlier,
-            zeropoint_outlier=zeropoint_outlier
-            if not self.symmetrical_quantization
-            else None,
+            scale=scales,
+            zeropoint=zeropoints,
+            quantized_vector=quantized_values,
             outlier_indices=outlier_indices,
-            quantized_vector_outlier=quantized_outlier,
         )
 
     def quantize_weight_matrix(

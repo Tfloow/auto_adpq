@@ -37,9 +37,6 @@ def make_valid_adpq_quantized_weights(group_num=2, group_size=4):
     scale = [1.0] * group_num
     zeropoint = [0.0] * group_num
     quantized_vector = [[1, 2, 3, 4] for _ in range(group_num)]
-    scale_outlier = [1.0] * group_num
-    zeropoint_outlier = [0.0] * group_num
-    quantized_vector_outlier = [[5] for _ in range(group_num)]
     outlier_indices = [[0] for _ in range(group_num)]
 
     return dict(
@@ -47,9 +44,6 @@ def make_valid_adpq_quantized_weights(group_num=2, group_size=4):
         scale=scale,
         zeropoint=zeropoint,
         quantized_vector=quantized_vector,
-        scale_outlier=scale_outlier,
-        zeropoint_outlier=zeropoint_outlier,
-        quantized_vector_outlier=quantized_vector_outlier,
         outlier_indices=outlier_indices,
     )
 
@@ -61,7 +55,7 @@ def test_adpq_quantized_weights_accepts_valid_payload_and_rejects_bad_lengths():
     assert obj.group_num == 3
 
     # Now break one list length and expect ValueError
-    key = ["scale", "zeropoint", "quantized_vector", "scale_outlier", "zeropoint_outlier", "quantized_vector_outlier", "outlier_indices"]
+    key = ["scale", "zeropoint", "quantized_vector", "outlier_indices"]
     for k in key:
         bad = make_valid_adpq_quantized_weights(group_num=3)
         bad[k] = [1.0]  # wrong length
