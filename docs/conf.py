@@ -9,7 +9,6 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
-    "sphinx_multiversion",
 ]
 
 templates_path = ["_templates"]

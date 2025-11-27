@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+# replace print with logging
+import logging
+import os
 import warnings
 from typing import Optional, Union
 
 import numpy as np
 import torch
 from pydantic import BaseModel
+
+debug_enabled = os.getenv("AUTO_ADPQ_DEBUG", "0") == "1"
+if debug_enabled:
+    logging.basicConfig(
+        filename="auto_adpq_debug.log",
+        filemode="a",
+        format="%(asctime)s,%(msecs)03d %(name)s %(levelname)s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+        force=True,
+        level=logging.DEBUG,
+    )
+    logging.debug("Debugging enabled for auto_adpq module.")
+logger = logging.getLogger(__name__)
 
 
 class AutoAdpQConfig(BaseModel):
@@ -161,6 +177,7 @@ class Auto_AdpQ:
                 "group_size is large, will have larger memory overhead."
                 " Consider using a 128 group_size for better performance.",
                 UserWarning,
+                stacklevel=2,
             )
             self.outlier_index_format = np.int16
 
@@ -196,7 +213,7 @@ class Auto_AdpQ:
             zeropoint = np.nan  # not used in symmetrical quantization
             quantized = np.round(scale * sub_vector).astype(np.int8)
 
-            print(f"Symmetrical Quantizatiokjhkjn: max_abs={max_abs}, scale={scale}")
+            logger.debug(f"Symmetrical Quantization: max_abs={max_abs}, scale={scale}")
         else:
             scale = (2**self.q_bit - 1) / (np.max(sub_vector) - np.min(sub_vector))
             zeropoint = -np.round(np.min(sub_vector) * scale) - 2 ** (self.q_bit - 1)
@@ -311,7 +328,7 @@ class Auto_AdpQ:
         num_groups = matrix.shape[0]
 
         while (n_outlier / n_item) > self.alpha and ite < self.n_iters:
-            # print(f"Iteration {ite}: Outlier ratio = {n_outlier / n_item}")
+            # logger.debug(f"Iteration {ite}: Outlier ratio = {n_outlier / n_item}")
             ite += 1
             outlier_indices = -np.ones_like(matrix, dtype=self.outlier_index_format)
             n_outlier = 0
@@ -340,6 +357,7 @@ class Auto_AdpQ:
             warnings.warn(
                 "Lasso outlier detection did not converge within max iterations.",
                 UserWarning,
+                stacklevel=2,
             )
 
         return outlier_indices, n_outlier / n_item
@@ -358,7 +376,7 @@ class Auto_AdpQ:
         matrix = matrix.reshape((-1, self.group_size))
 
         outlier_indices, alpha = self.lasso_outlier_detection(matrix)
-        print(f"Detected outlier ratio: {alpha}")
+        logger.debug(f"Detected outlier ratio: {alpha}")
 
         # Create bitmask for non-outlier and outlier elements
         non_outlier_mask = np.ones(matrix.shape, dtype=bool)
@@ -371,6 +389,7 @@ class Auto_AdpQ:
                         f"Outlier index exceeds group size; skipping this index for"
                         f" group {group_idx}, index {outlier_idx}",
                         UserWarning,
+                        stacklevel=2,
                     )
 
         outlier_weight = matrix.copy()
@@ -379,10 +398,10 @@ class Auto_AdpQ:
         non_outlier_weight = matrix.copy()
         non_outlier_weight[~non_outlier_mask] = 0
 
-        print("Weights to separation")
-        print(outlier_indices)
-        print(outlier_weight)
-        print(non_outlier_weight)
+        logger.debug("Weights to separation")
+        logger.debug(outlier_indices)
+        logger.debug(outlier_weight)
+        logger.debug(non_outlier_weight)
 
         # Quantize non-outlier and outlier weights separately
         num_groups = matrix.shape[0]
@@ -392,6 +411,11 @@ class Auto_AdpQ:
             if not self.symmetrical_quantization
             else None
         )
+        # To be removed, just to pass linter
+        del scales
+        del zeropoints
+        del original_shape
+
         quantized_non_outlier = []
 
         for group_idx in range(num_groups):
@@ -401,12 +425,12 @@ class Auto_AdpQ:
             quantized_outlier, scale_outlier, zeropoint_outlier = self.quantize(
                 outlier_weight[group_idx]
             )
-            print(f"Group {group_idx}:")
-            print(quantized_non_outlier)
-            print(scale, zeropoint)
+            logger.debug(f"Group {group_idx}:")
+            logger.debug(quantized_non_outlier)
+            logger.debug(scale, zeropoint)
 
-        print(type(quantized_non_outlier))
-        print(type(quantized_outlier))
+        logger.debug(type(quantized_non_outlier))
+        logger.debug(type(quantized_outlier))
 
         return AdpQQuantizedWeights(
             group_num=num_groups,

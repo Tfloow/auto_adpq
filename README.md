@@ -12,6 +12,7 @@ multi-version docs), and contribute.
   - [Installation](#installation)
   - [Quick usage](#quick-usage)
   - [Running tests \& linters](#running-tests--linters)
+    - [Debug mode](#debug-mode)
   - [Documentation](#documentation)
     - [Building the documentation](#building-the-documentation)
   - [Contributing](#contributing)
@@ -60,7 +61,7 @@ users to try first.
 
 ## Running tests & linters
 
-Coverage test: **66%**
+Coverage test: **75%**
 
 - Run tests with pytest:
 
@@ -78,6 +79,18 @@ make coverage
 
 ```powershell
 make ruff
+```
+
+### Debug mode
+
+To obtain logs of the package, it is possible to enable the logging module. To activate it please create the new environment variable `AUTO_ADPQ_DEBUG` by running:
+
+```powershell
+# Linux
+export AUTO_ADPQ_DEBUG=1
+
+# Windows
+$Env:AUTO_ADPQ_DEBUG = 1
 ```
 
 ## Documentation
