@@ -290,6 +290,65 @@ class Auto_AdpQ:
 
         return reconstructed
 
+    def _optimization_function(
+        self, matrix: np.ndarray, lambda_prime: float
+    ) -> tuple[np.ndarray, float]:
+        """Optimization function for Lasso outlier detection.
+
+        Args:
+            matrix (numpy.ndarray): the input matrix. shaped by (N, group_size).
+            lambda_prime (float): the regularization parameter.
+
+        Returns:
+            np.ndarray: the outlier indices.
+            float: the number of outliers detected.
+        """
+        num_groups = matrix.shape[0]
+        outlier_indices = -np.ones_like(matrix, dtype=self.outlier_index_format)
+        n_outlier = 0
+
+        for i in range(num_groups):
+            group_vector = matrix[i]
+            adjusted_value = np.abs(group_vector) - (
+                lambda_prime / np.abs(group_vector)
+            )
+
+            # Find the one that are above zero = Outliers
+            outliers = adjusted_value > 0
+
+            # Find indices where outliers == 1
+            outlier_index = outliers.nonzero()[0]
+
+            outlier_indices[i, : len(outlier_index)] = outlier_index.astype(
+                self.outlier_index_format
+            )
+            n_outlier += len(outlier_index)
+
+        return outlier_indices, n_outlier
+
+    def _brent_function(
+        bk: float, bk_1: float, ak: float, f_bk: float, f_bk_1: float
+    ) -> float:
+        """Brent's method helper function.
+
+        Following the algorithm from Brent's method to find root of a function.
+        https://en.wikipedia.org/wiki/Brent%27s_method
+
+        Args:
+            bk (float): current point.
+            bk_1 (float): previous point.
+            ak (float): contra point.
+            f_bk (float): function value at current point.
+            f_bk_1 (float): function value at previous point.
+
+        Returns:
+            float: next point.
+        """
+        if f_bk != f_bk_1:
+            return bk - (bk - bk_1) / (f_bk - f_bk_1) * f_bk
+        else:
+            return (bk + ak) / 2
+
     def lasso_outlier_detection(
         self, matrix: Union[list[float], np.ndarray, torch.Tensor]
     ) -> tuple[np.ndarray, float]:
@@ -311,6 +370,9 @@ class Auto_AdpQ:
         :math:`max(0, |w_i| - \frac{\lambda'}{|w_i|})` and we sum up all values from
         the matrix.
 
+        Based on Brent's method, we can find the root of the function. Inspired by
+        https://nickcdryan.com/2017/09/13/root-finding-algorithms-in-python-line-search-bisection-secant-newton-raphson-boydens-inverse-quadratic-interpolation-brents/
+
         Args:
             matrix (numpy.ndarray): the input matrix. already arrange per group
                                     (N, group_size).
@@ -321,44 +383,103 @@ class Auto_AdpQ:
                 e.g., if group_size=4 and outlier indices are [[],[1,3],[]],
             float: the ratio of outliers in the matrix.
         """
-        lambda_prime = 1e5
+        x0 = 0.0
+        x1 = 1e9
+
+        # Previous points
+        _, prev_n_outlier = self._optimization_function(matrix, x0)
+
+        # Initial point
+        _, n_outlier = self._optimization_function(matrix, x1)
+
         ite = 0
         n_item = matrix.size
-        n_outlier = n_item
-        num_groups = matrix.shape[0]
+        target_outlier = self.alpha * n_item
 
-        while (n_outlier / n_item) > self.alpha and ite < self.n_iters:
-            # logger.debug(f"Iteration {ite}: Outlier ratio = {n_outlier / n_item}")
+        fx0, fx1 = prev_n_outlier - target_outlier, n_outlier - target_outlier
+
+        logger.debug(f"Initial bracket values: fx0={fx0}, fx1={fx1}")
+        assert (fx0 * fx1) < 0, (
+            "Initial points do not bracket the target outlier number."
+        )
+
+        if abs(fx0) < abs(fx1):
+            x0, x1 = x1, x0
+            prev_n_outlier, n_outlier = n_outlier, prev_n_outlier
+            fx0, fx1 = fx1, fx0
+
+        x2, fx2 = x0, fx0
+
+        mflag = True
+
+        # 0.5% tolerance based on target outlier
+        # tol = 0.005 * target_outlier
+        tolerance = 1e-5
+
+        d = None
+
+        while ite < self.n_iters and abs(x1 - x0) > tolerance:
+            _, fx0 = self._optimization_function(matrix, x0)
+            _, fx1 = self._optimization_function(matrix, x1)
+            _, fx2 = self._optimization_function(matrix, x2)
+
+            fx0 = fx0 - target_outlier
+            fx1 = fx1 - target_outlier
+            fx2 = fx2 - target_outlier
+
+            logger.debug(
+                f"Iteration {ite}: x0={x0}, fx0={fx0}, x1={x1}, fx1={fx1},\
+                    x2={x2}, fx2={fx2}"
+            )
+
+            if fx0 != fx2 and fx1 != fx2:
+                L0 = (x0 * fx1 * fx2) / ((fx0 - fx1) * (fx0 - fx2))
+                L1 = (x1 * fx0 * fx2) / ((fx1 - fx0) * (fx1 - fx2))
+                L2 = (x2 * fx1 * fx0) / ((fx2 - fx0) * (fx2 - fx1))
+                new = L0 + L1 + L2
+            # Since the function is not continuous, we can have a case where
+            # fx1 - fx0 == 0 all of sudden
+            elif (fx1 - fx0) == 0 and fx1 == 0:
+                new = x1
+            else:
+                new = x1 - ((fx1 * (x1 - x0)) / (fx1 - fx0))
+
+            if (
+                (new < ((3 * x0 + x1) / 4) or new > x1)
+                or (mflag and (abs(new - x1)) >= (abs(x1 - x2) / 2))
+                or (not mflag and (abs(new - x1)) >= (abs(x2 - d) / 2))
+                or (mflag and (abs(x1 - x2)) < tolerance)
+                or (not mflag and (abs(x2 - d)) < tolerance)
+            ):
+                new = (x0 + x1) / 2
+                mflag = True
+
+            else:
+                mflag = False
+
+            _, fnew = self._optimization_function(matrix, new)
+            fnew = fnew - target_outlier
+            d, x2 = x2, x1
+
+            if (fx0 * fnew) < 0:
+                x1 = new
+            else:
+                x0 = new
+
+            if abs(fx0) < abs(fx1):
+                x0, x1 = x1, x0
+
             ite += 1
-            outlier_indices = -np.ones_like(matrix, dtype=self.outlier_index_format)
-            n_outlier = 0
-
-            for i in range(num_groups):
-                group_vector = matrix[i]
-                adjusted_value = np.abs(group_vector) - (
-                    lambda_prime / np.abs(group_vector)
-                )
-
-                # Find the one that are above zero = Outliers
-                outliers = adjusted_value > 0
-
-                # Find indices where outliers == 1
-                outlier_index = outliers.nonzero()[0]
-
-                outlier_indices[i, : len(outlier_index)] = outlier_index.astype(
-                    self.outlier_index_format
-                )
-                n_outlier += len(outlier_index)
-
-            # dummy update to lambda_prime for next iteration
-            lambda_prime *= 0.55
 
         if ite == self.n_iters:
             warnings.warn(
-                "Lasso outlier detection did not converge within max iterations.",
+                f"Lasso outlier detection did not converge within max iterations.\n\
+                Check tolerance or increase n_iters. Latest step size: {abs(x1 - x0)}",
                 UserWarning,
                 stacklevel=2,
             )
+
+        outlier_indices, n_outlier = self._optimization_function(matrix, new)
 
         return outlier_indices, n_outlier / n_item
 

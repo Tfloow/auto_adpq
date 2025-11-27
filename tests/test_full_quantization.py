@@ -14,7 +14,7 @@ def test_lasso_outlier_detection():
     ], dtype=np.float32)
 
     alpha = 2/32  # Set alpha to detect outliers
-    auto_adpq = Auto_AdpQ(group_size=8, alpha=alpha, n_iters=20, q_bit=4, data_packing=False)
+    auto_adpq = Auto_AdpQ(group_size=8, alpha=alpha, n_iters=100, q_bit=4, data_packing=False)
 
     outlier_indices, detected_alpha = auto_adpq.lasso_outlier_detection(matrix)
 
