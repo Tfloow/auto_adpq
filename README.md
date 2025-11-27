@@ -1,3 +1,5 @@
+[![Docs](https://img.shields.io/badge/Docs-latest-blue?logo=readme&logoColor=f5f5f5)](https://auto-adpq.readthedocs.io/en/latest/) [![CI](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml) [![Paper](https://img.shields.io/badge/Paper-2405.13358-B31B1B?logo=arxiv&logoColor=f5f5f5)](https://arxiv.org/abs/2405.13358)
+
 # auto_adpq
 
 Adaptive Post-Training Quantization tooling (replicating AdpQ)
