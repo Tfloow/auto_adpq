@@ -31,6 +31,25 @@ def test_lasso_outlier_detection():
     assert np.array_equal(outlier_indices, expected_outlier_indices)
     assert pytest.approx(detected_alpha, 0.01) == alpha  # Two outliers in total of 32 elements
 
+def test_reconstruction():
+    matrix = np.array([
+        [1, 2, 3, 4, 5, 6, 7, 8],
+        [1, 2, 1000, 4, 5, 6, 7, 8],  # Outlier at index 2
+        [1, 2, 3, 4, 5, -999, 7, 8],   # Outlier at index 5
+        [1, 2, 3, 4, 5, 6, 7, 8],
+    ], dtype=np.float32)
+
+    alpha = 2/32  # Set alpha to detect outliers
+    auto_adpq = Auto_AdpQ(group_size=4, alpha=alpha, n_iters=100, q_bit=4, data_packing=False)
+
+    quantized_weights = auto_adpq.AdpQ_quantize(matrix)
+    reconstructed = auto_adpq.reconstruct_weights(quantized_weights)
+    
+    print(matrix)
+    print(reconstructed)
+    # Tolerance of 15 % due to quantization error
+    assert np.allclose(reconstructed, matrix, rtol=0.15, atol=0.15)
+
 # Skip this test
 # @pytest.mark.skip(reason="Skipping synthetic data test for now")
 def test_with_synthetic_data():
@@ -70,3 +89,29 @@ def test_with_synthetic_data():
     outlier_indices_result = np.array(quantized_weights.outlier_indices).reshape(-1, group_size)
     
     assert True
+    
+def test_save_and_load_quantized_weights():
+    """Test saving and loading of AdpQQuantizedWeights."""
+    from auto_adpq import Auto_AdpQ, AdpQQuantizedWeights
+    
+    # Create a sample AdpQQuantizedWeights object
+    original = AdpQQuantizedWeights(
+        group_num=2,
+        scale=np.array([0.1, 0.2]),
+        zeropoint=np.array([0.0, 0.0]),
+        quantized_vector=np.array([[1, 2, 3, 4], [5, 6, 7, 8]]),
+        outlier_indices=np.array([[0], [1]]),
+    )
+
+    adpq = Auto_AdpQ()
+    adpq.save_weights(original, 'tests/out_test/')
+    
+    # Load the weights back
+    loaded = adpq.load_weights('tests/out_test/weights_adpq_quantized.npz')
+
+    # Verify that the loaded object matches the original
+    assert np.array_equal(loaded.group_num, original.group_num)
+    assert np.array_equal(loaded.scale, original.scale)
+    assert np.array_equal(loaded.zeropoint, original.zeropoint)
+    assert np.array_equal(loaded.quantized_vector, original.quantized_vector)
+    assert np.array_equal(loaded.outlier_indices, original.outlier_indices)

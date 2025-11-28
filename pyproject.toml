@@ -6,13 +6,22 @@ authors = [
     {name = "Tfloow", email = "88899420+Tfloow@users.noreply.github.com"}
 ]
 license="Apache-2.0"
+license-files = ["LICENSE"]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "torch",
-    "scikit-learn",
+    "numpy",
     "pydantic>=1.10"
 ]
+
+[project.urls]
+homepage = "https://thomas.debelle.be"
+documentation = "https://auto-adpq.readthedocs.io/en/stable/"
+source = "https://github.com/Tfloow/auto_adpq"
+download = "https://pypi.org/project/auto_adpq/#files"
+tracker = "https://github.com/Tfloow/auto_adpq/issues"
+"release notes" = "https://auto-adpq.readthedocs.io/en/stable/release"
 
 [project.optional-dependencies]
 dev = [

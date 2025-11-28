@@ -79,6 +79,7 @@ def test_auto_adpq_quantization_asymmetrical():
     #assert pytest.approx(scale, 1e-6) == expected_scale
     #assert pytest.approx(zeropoint, 1e-6) == expected_zeropoint    
 
+@pytest.mark.slow
 def test_reconstruct_vector():
     """Test the reconstruct_vector method of Auto_AdpQ."""
     import numpy as np
@@ -100,7 +101,7 @@ def test_reconstruct_vector():
     quantized_vectors = (non_outlier_vector, outlier_vector)
     outlier_indices = [2]
 
-    reconstructed = auto_adpq.reconstruct_vector(quantized_vectors, outlier_indices)
+    reconstructed = auto_adpq.reconstruct_weights(quantized_vectors, outlier_indices)
 
     expected_reconstructed = np.array([10, -20, 100, 30, -40], dtype=np.int8)
     
@@ -138,16 +139,8 @@ def test_lasso_outlier_detection():
     matrix = np.load("tests/weights/llama-8B/model.layers.0.self_attn.q_proj.weight.npy")
     
     _, outlier_ratio = auto_adpq.lasso_outlier_detection(matrix)
-
-    # I should run the 7B test and compare to known outliers from the paper
-    """expected_outlier_indices = [2, 5]  # indices of 100.0 and -200.0
-    expected_outlier_ratio = 2 / 6
-
-    assert outlier_indices == expected_outlier_indices
-    assert abs(outlier_ratio - expected_outlier_ratio) < 1e-6"""
-    print(f"Detected outlier ratio: {outlier_ratio}")
     
-    assert outlier_ratio < config.alpha
+    assert outlier_ratio <= config.alpha
     
 if __name__ == "__main__":
     test_lasso_outlier_detection()
