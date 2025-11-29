@@ -240,6 +240,72 @@ class Auto_AdpQ:
 
         return quantized, scale, zeropoint
 
+    def pack_bits(self, quantized_weights: np.ndarray) -> np.ndarray:
+        """Pack quantized weights vector.
+
+        Args:
+            quantized_weights (np.ndarray): the quantized weights must be of
+                size (M,N) typical matrix size.
+
+        Returns:
+            np.ndarray: the bit-packed quantized weights.
+        """
+        if self.q_bit % 2 != 0:
+            raise ValueError("Data packing is only supported for even q_bit values.")
+
+        weights_per_int16 = 16 // self.q_bit
+        mask = (1 << self.q_bit) - 1
+
+        bit_pack_array = np.zeros(
+            (
+                quantized_weights.shape[0],
+                quantized_weights.shape[1] // weights_per_int16,
+            ),
+            dtype=np.uint16,
+        )
+
+        for row in range(quantized_weights.shape[0]):
+            for i in range(bit_pack_array.shape[1]):
+                packed_value = np.uint16(0)
+                for j in range(weights_per_int16):
+                    q_value = quantized_weights[row, i * weights_per_int16 + j] & mask
+                    # To save space, the quantized weights are saved in int8,
+                    # must be upcasted
+                    q_value = np.uint16(q_value)
+                    packed_value |= q_value << (j * self.q_bit)
+                bit_pack_array[row, i] = packed_value
+
+        return bit_pack_array
+
+    def unpack_bits(self, packed_weights: np.ndarray) -> np.ndarray:
+        """Unpack bit-packed quantized weights.
+
+        Args:
+            packed_weights (np.ndarray): the bit-packed quantized weights.
+
+        Returns:
+            np.ndarray: the unpacked quantized weights.
+        """
+        if self.q_bit % 2 != 0:
+            raise ValueError("Data packing is only supported for even q_bit values.")
+
+        weights_per_int16 = 16 // self.q_bit
+        mask = (1 << self.q_bit) - 1
+
+        unpacked_array = np.zeros(
+            (packed_weights.shape[0], packed_weights.shape[1] * weights_per_int16),
+            dtype=np.int8,
+        )
+
+        for row in range(packed_weights.shape[0]):
+            for i in range(packed_weights.shape[1]):
+                packed_value = packed_weights[row, i]
+                for j in range(weights_per_int16):
+                    q_value = (packed_value >> (j * self.q_bit)) & mask
+                    unpacked_array[row, i * weights_per_int16 + j] = q_value
+
+        return unpacked_array
+
     def _indices_to_bitmask_of_outliers(self, outlier_indices: list[int]) -> np.ndarray:
         """Convert per-group outlier index lists to a boolean mask.
 
@@ -329,6 +395,7 @@ class Auto_AdpQ:
         quantized_vectors = adpq_quantized_weights.quantized_vector.reshape(
             adpq_quantized_weights.original_shape
         )
+        quantized_vectors = self.pack_bits(quantized_vectors) if self.data_packing else quantized_vectors
         np.savez(
             filepath + f"{weight_name}_adpq_quantized.npz",
             quantized_vectors=quantized_vectors,
@@ -354,6 +421,8 @@ class Auto_AdpQ:
         """
         data = np.load(filepath, allow_pickle=True)
         quantized_vectors = data["quantized_vectors"]
+        if self.data_packing:
+            quantized_vectors = self.unpack_bits(quantized_vectors)
         group_num = data["group_num"].item()
         scale = data["scale"]
         zeropoint = data["zeropoint"]
@@ -662,3 +731,23 @@ class Auto_AdpQ:
             quantized_vector=quantized_values,
             outlier_indices=outlier_indices,
         )
+
+    def quantize_model(self, model: torch.nn.Module) -> torch.nn.Module:
+        """Quantize all linear layers in a given model using AdpQ.
+
+        Args:
+            model (torch.nn.Module): The model to be quantized.
+
+        Returns:
+            torch.nn.Module: The quantized model.
+        """
+        raise NotImplementedError("Model quantization is not yet implemented.")
+
+    def save_pretrained(self, model: torch.nn.Module, save_directory: str):
+        """Save the quantized model in Hugging Face format.
+
+        Args:
+            model (torch.nn.Module): The quantized model to be saved.
+            save_directory (str): The directory where the model will be saved.
+        """
+        raise NotImplementedError("Saving pretrained models is not yet implemented.")

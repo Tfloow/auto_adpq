@@ -32,7 +32,8 @@ dev = [
     "sphinx",
     "sphinx-multiversion",
     "furo",
-    "twine"
+    "twine",
+    "snakeviz"
 ]
 
 

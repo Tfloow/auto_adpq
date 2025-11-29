@@ -127,7 +127,7 @@ def test_reconstruct_vector():
     
     assert np.array_equal(reconstructed_dp, expected_reconstructed_dp)
     
-@pytest.mark.slow
+#@pytest.mark.slow
 def test_lasso_outlier_detection():
     """Test the lasso_outlier_detection method of Auto_AdpQ."""
     import numpy as np
