@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
@@ -753,6 +754,60 @@ class Auto_AdpQ:
             outlier_indices=outlier_indices,
         )
 
+    def quantize_model_multithreaded(
+        self, model: torch.nn.Module, max_workers: int = 4
+    ):
+        """Quantize valid linear layers using a thread pool.
+
+        Args:
+            model: The PyTorch model.
+            max_workers: Limit threads to avoid OOM (Out of Memory).
+                         Set to 4-8 for desktop, higher for servers.
+        """
+        target_suffixes = (
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "up_proj",
+            "down_proj",
+            "gate_proj",
+        )
+        future_to_layer = {}
+
+        logger.info(f"Starting threaded quantization with {max_workers} workers...")
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Iterate through model, find layers, extract data, submit to pool
+            for name, module in model.named_modules():
+                if isinstance(module, torch.nn.Linear) and name.endswith(
+                    target_suffixes
+                ):
+                    logger.info(f"Extracting weights for: {name}")
+
+                    if module.weight.dtype == torch.bfloat16:
+                        weight_array = (
+                            module.weight.to(torch.float16).detach().cpu().numpy()
+                        )
+                    else:
+                        weight_array = module.weight.detach().cpu().numpy()
+
+                    future = executor.submit(self.AdpQ_quantize, weight_array)
+                    future_to_layer[future] = name
+
+            # 2. COLLECTION PHASE
+            for future in as_completed(future_to_layer):
+                layer_name = future_to_layer[future]
+                try:
+                    result = future.result()
+                    self.quantized_weights[layer_name] = result
+                    logger.info(f"✅ Finished: {layer_name}")
+
+                except Exception as exc:
+                    logger.error(f"❌ Exception in layer {layer_name}: {exc}")
+
+        logger.info("Quantization complete.")
+
     def quantize_model(self, model: torch.nn.Module):
         """Quantize all linear layers in a given model using AdpQ.
 
@@ -760,6 +815,8 @@ class Auto_AdpQ:
             model (torch.nn.Module): The model to be quantized.
                 focus on the QKVO, up, down and gate linear layers.
         """
+        i = 10
+
         for name, module in model.named_modules():
             if isinstance(module, torch.nn.Linear):
                 logger.info(f"Checking datatype: {name}")
@@ -774,6 +831,11 @@ class Auto_AdpQ:
 
                 logger.info(f"Quantizing layer: {name}")
                 self.quantized_weights[name] = self.AdpQ_quantize(weight_array)
+
+                logger.info(f"Finished quantizing layer: {name}")
+                if i == 0:
+                    break  # temporary
+                i -= 1
 
         """for name, module in model.named_modules():
         if isinstance(module, torch.nn.Linear):

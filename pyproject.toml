@@ -12,7 +12,8 @@ requires-python = ">=3.10"
 dependencies = [
     "torch",
     "numpy",
-    "pydantic>=1.10"
+    "pydantic>=1.10",
+    "queue"
 ]
 
 [project.urls]
