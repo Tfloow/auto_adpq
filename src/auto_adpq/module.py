@@ -12,6 +12,13 @@ import numpy as np
 import torch
 from pydantic import BaseModel, ConfigDict
 
+# Save info and warning logs to console
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO,
+)
+
 debug_enabled = os.getenv("AUTO_ADPQ_DEBUG", "0") == "1"
 if debug_enabled:
     logging.basicConfig(
@@ -22,7 +29,8 @@ if debug_enabled:
         force=True,
         level=logging.DEBUG,
     )
-    logging.debug("Debugging enabled for auto_adpq module.")
+    logging.info("Debugging enabled for auto_adpq module.")
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,6 +98,10 @@ class AdpQQuantizedWeights(BaseModel):
 
     Raises:
         ValueError: If lengths of lists do not match `group_num`.
+
+    TODO: Currently, there is a major overhead when creating a new object
+    to validate the field. Since it is used internally only, we could ditch
+    the Pydantic module but would need to ensure proper dump and load function.
     """
 
     original_shape: Optional[tuple[int, ...]] = None
@@ -181,6 +193,8 @@ class Auto_AdpQ:
                 stacklevel=2,
             )
             self.outlier_index_format = np.int16
+
+        self.quantized_weights = {}
 
         # assign validated attributes
         self.cfg = cfg
@@ -395,7 +409,11 @@ class Auto_AdpQ:
         quantized_vectors = adpq_quantized_weights.quantized_vector.reshape(
             adpq_quantized_weights.original_shape
         )
-        quantized_vectors = self.pack_bits(quantized_vectors) if self.data_packing else quantized_vectors
+        quantized_vectors = (
+            self.pack_bits(quantized_vectors)
+            if self.data_packing
+            else quantized_vectors
+        )
         np.savez(
             filepath + f"{weight_name}_adpq_quantized.npz",
             quantized_vectors=quantized_vectors,
@@ -463,6 +481,7 @@ class Auto_AdpQ:
 
         for i in range(num_groups):
             group_vector = matrix[i]
+            # np.abs(group_vector) is sometimes = 0 TODO: check why
             adjusted_value = np.abs(group_vector) - (
                 lambda_prime / np.abs(group_vector)
             )
@@ -479,6 +498,25 @@ class Auto_AdpQ:
             n_outlier += len(outlier_index)
 
         return outlier_indices, n_outlier
+
+    def _optimization_function_fast(
+        self, matrix: np.ndarray, lambda_prime: float
+    ) -> int:
+        """Like ``_optimization_function`` but only return the amount of outliers.
+
+        Args:
+            matrix (np.ndarray): 2-D array shaped (num_groups, group_size).
+            lambda_prime (float): Regularization parameter controlling the
+                threshold for outlier selection.
+
+        Returns:
+            float: n_outlier, the total count of outliers.
+        """
+        abs_matrix = np.abs(matrix)
+        # Avoid division by zero
+        abs_matrix = np.where(abs_matrix == 0, np.finfo(float).eps, abs_matrix)
+        adjusted = abs_matrix - (lambda_prime / abs_matrix)
+        return np.count_nonzero(adjusted > 0)
 
     def _brent_function(
         bk: float, bk_1: float, ak: float, f_bk: float, f_bk_1: float
@@ -525,10 +563,10 @@ class Auto_AdpQ:
         x1 = 1e7
 
         # Previous points
-        _, prev_n_outlier = self._optimization_function(matrix, x0)
+        prev_n_outlier = self._optimization_function_fast(matrix, x0)
 
         # Initial point
-        _, n_outlier = self._optimization_function(matrix, x1)
+        n_outlier = self._optimization_function_fast(matrix, x1)
 
         ite = 0
         n_item = matrix.size
@@ -558,9 +596,9 @@ class Auto_AdpQ:
         d = None
 
         while ite < self.n_iters and abs(x1 - x0) > tolerance:
-            _, fx0 = self._optimization_function(matrix, x0)
-            _, fx1 = self._optimization_function(matrix, x1)
-            _, fx2 = self._optimization_function(matrix, x2)
+            fx0 = self._optimization_function_fast(matrix, x0)
+            fx1 = self._optimization_function_fast(matrix, x1)
+            fx2 = self._optimization_function_fast(matrix, x2)
 
             fx0 = fx0 - target_outlier
             fx1 = fx1 - target_outlier
@@ -579,7 +617,7 @@ class Auto_AdpQ:
 
             logger.debug(
                 f"Iteration {ite}: x0={x0}, fx0={fx0}, x1={x1}, fx1={fx1},\
-                    x2={x2}, fx2={fx2}"
+            x2={x2}, fx2={fx2}"
             )
 
             if fx0 != fx2 and fx1 != fx2:
@@ -609,7 +647,7 @@ class Auto_AdpQ:
             else:
                 mflag = False
 
-            _, fnew = self._optimization_function(matrix, new)
+            fnew = self._optimization_function_fast(matrix, new)
             fnew = fnew - target_outlier
             d, x2 = x2, x1
 
@@ -664,12 +702,6 @@ class Auto_AdpQ:
         non_outlier_weight = matrix.copy()
         non_outlier_weight[outlier_mask] = 0
 
-        logger.debug("Weights to separation")
-        logger.debug(outlier_mask)
-        logger.debug(outlier_indices)
-        logger.debug(outlier_weight)
-        logger.debug(non_outlier_weight)
-
         num_groups = matrix.shape[0]
 
         # Initialize storage for quantized values
@@ -686,10 +718,6 @@ class Auto_AdpQ:
             quantized_non_outlier, scale, zeropoint = self.quantize(
                 non_outlier_weight[group_idx]
             )
-            logger.debug("Quantized non-outlier:")
-            logger.debug(quantized_non_outlier)
-            logger.debug(scale)
-            logger.debug(zeropoint)
 
             if outlier_indices[group_idx, 0] == -1:
                 # No outliers in this group
@@ -705,11 +733,6 @@ class Auto_AdpQ:
                 quantized_outlier, scale_outlier, zeropoint_outlier = self.quantize(
                     outlier_weight[group_idx]
                 )
-            logger.debug("Quantized outlier:")
-            logger.debug(quantized_outlier)
-            logger.debug(scale_outlier)
-            logger.debug(zeropoint_outlier)
-
             # Save results
             scales[group_idx, 0] = scale
             scales[group_idx, 1] = scale_outlier
@@ -717,11 +740,6 @@ class Auto_AdpQ:
                 zeropoints[group_idx, 0] = zeropoint
                 zeropoints[group_idx, 1] = zeropoint_outlier
             quantized_values[group_idx, :] = quantized_non_outlier + quantized_outlier
-
-        logger.debug(type(num_groups))
-        logger.debug(type(scales))
-        logger.debug(type(zeropoints))
-        logger.debug(type(quantized_values))
 
         return AdpQQuantizedWeights(
             original_shape=original_shape,
@@ -732,22 +750,57 @@ class Auto_AdpQ:
             outlier_indices=outlier_indices,
         )
 
-    def quantize_model(self, model: torch.nn.Module) -> torch.nn.Module:
+    def quantize_model(self, model: torch.nn.Module):
         """Quantize all linear layers in a given model using AdpQ.
 
         Args:
             model (torch.nn.Module): The model to be quantized.
-
-        Returns:
-            torch.nn.Module: The quantized model.
+                focus on the QKVO, up, down and gate linear layers.
         """
-        raise NotImplementedError("Model quantization is not yet implemented.")
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                logger.info(f"Checking datatype: {name}")
+                # extract weights as numpy array
+                # If Bfloat16, convert to float16 first
+                if module.weight.dtype == torch.bfloat16:
+                    weight_array = (
+                        module.weight.to(torch.float16).detach().cpu().numpy()
+                    )
+                else:
+                    weight_array = module.weight.detach().cpu().numpy()
 
-    def save_pretrained(self, model: torch.nn.Module, save_directory: str):
+                logger.info(f"Quantizing layer: {name}")
+                self.quantized_weights[name] = self.AdpQ_quantize(weight_array)
+
+        """for name, module in model.named_modules():
+        if isinstance(module, torch.nn.Linear):
+            print(f"Quantizing layer: {name}")
+            quantized_module = adpq.quantize_module(module)
+            # Replace the original module with the quantized one
+            parent_module = model
+            name_parts = name.split('.')
+            for part in name_parts[:-1]:
+                parent_module = getattr(parent_module, part)
+            setattr(parent_module, name_parts[-1], quantized_module)
+            # Free up memory
+            gc.collect()
+        torch.cuda.empty_cache()"""
+
+    def save_pretrained(self, save_directory: str):
         """Save the quantized model in Hugging Face format.
 
         Args:
-            model (torch.nn.Module): The quantized model to be saved.
             save_directory (str): The directory where the model will be saved.
         """
-        raise NotImplementedError("Saving pretrained models is not yet implemented.")
+        os.makedirs(save_directory, exist_ok=True)
+
+        for name, quantized_weights in self.quantized_weights.items():
+            logger.info(f"Saving quantized weights for layer: {name}")
+            weight_filename = os.path.join(
+                save_directory, f"{name.replace('.', '_')}_adpq_quantized.npz"
+            )
+            self.save_weights(
+                quantized_weights,
+                filepath=weight_filename.replace("_adpq_quantized.npz", ""),
+                weight_name=name.replace(".", "_"),
+            )

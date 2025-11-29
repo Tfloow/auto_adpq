@@ -127,7 +127,7 @@ def test_reconstruct_vector():
     
     assert np.array_equal(reconstructed_dp, expected_reconstructed_dp)
     
-#@pytest.mark.slow
+@pytest.mark.slow
 def test_lasso_outlier_detection():
     """Test the lasso_outlier_detection method of Auto_AdpQ."""
     import numpy as np
@@ -138,7 +138,7 @@ def test_lasso_outlier_detection():
 
     matrix = np.load("tests/weights/llama-8B/model.layers.0.self_attn.q_proj.weight.npy")
     
-    _, outlier_ratio = auto_adpq.lasso_outlier_detection(matrix)
+    outlier_ratio = auto_adpq.lasso_outlier_detection_fast(matrix)
     
     assert outlier_ratio <= config.alpha
     

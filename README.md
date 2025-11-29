@@ -17,6 +17,7 @@ multi-version docs), and contribute.
     - [Debug mode](#debug-mode)
   - [Documentation](#documentation)
     - [Building the documentation](#building-the-documentation)
+  - [Tasklist](#tasklist)
   - [Contributing](#contributing)
   - [Development notes](#development-notes)
   - [License](#license)
@@ -63,7 +64,7 @@ users to try first.
 
 ## Running tests & linters
 
-Coverage test: **75%**
+Coverage test: **91%**
 
 - Run tests with pytest:
 
@@ -124,6 +125,12 @@ Notes about versions
 	renders a versions dropdown when the site is built with `sphinx-multiversion`.
 - Adjust `smv_tag_whitelist` and `smv_branch_whitelist` in `docs/conf.py` to
 	control which tags/branches are included in the build.
+
+## Tasklist
+
+- [ ] Optimize pydantic module `AdpQQuantizedWeights`
+  - Currently, there is a major overhead when creating a new object to validate the field. Since it is used internally only, we could ditch the Pydantic module but would need to ensure proper dump and load function
+- [ ] Support model and integrate with `.safetensors`
 
 ## Contributing
 

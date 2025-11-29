@@ -15,9 +15,14 @@ def test_lasso_outlier_detection():
     ], dtype=np.float32)
     
     outliers = [0 for _ in range(10)]
+    outliers_llm = [0 for _ in range(10)]
+
     for i in range(10):
         adpq = Auto_AdpQ(group_size=8, alpha=0.0, n_iters=100, q_bit=4, data_packing=False)
-        _, outliers[i] = adpq._optimization_function(matrix=matrix, lambda_prime=10**i)
+        outliers[i] = adpq._optimization_function_fast(matrix=matrix, lambda_prime=10**i)
+        outliers_llm[i] = adpq._optimization_function_fast_llm(matrix=matrix, lambda_prime=10**i)
+    
+    assert np.array_equal(np.array(outliers), np.array(outliers_llm)), "Fast and LLM methods yield different outlier counts"
     
     outliers = np.array(outliers)
     outliers -= 2  # We know there are 2 outliers in the matrix

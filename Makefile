@@ -17,7 +17,7 @@ coverage:
 	@coverage html
 
 profiling:
-	@python -m cProfile -o profile.out -m pytest -m "not slow"
+	@python -m cProfile -o profile.out examples/quantization_for_profiling.py
 	@snakeviz profile.out
 
 .PHONY: docs
