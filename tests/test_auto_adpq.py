@@ -59,5 +59,7 @@ def test_adpq_quantized_weights_accepts_valid_payload_and_rejects_bad_lengths():
     for k in key:
         bad = make_valid_adpq_quantized_weights(group_num=3)
         bad[k] = [1.0]  # wrong length
+        print(bad)
+        print(k)
         with pytest.raises(ValueError):
             AdpQQuantizedWeights(**bad)

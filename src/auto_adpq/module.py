@@ -6,11 +6,12 @@ from __future__ import annotations
 import logging
 import os
 import warnings
-from typing import Optional, Union
+from dataclasses import dataclass
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 # Save info and warning logs to console
 logging.basicConfig(
@@ -78,7 +79,8 @@ class AutoAdpQConfig(BaseModel):
             raise ValueError("group_size too large, must be less than 65536.")
 
 
-class AdpQQuantizedWeights(BaseModel):
+@dataclass(frozen=True)  # frozen=True makes it immutable (optional but safer)
+class AdpQQuantizedWeights:
     """Container for AdpQ quantization outputs.
 
     Attributes:
@@ -104,31 +106,32 @@ class AdpQQuantizedWeights(BaseModel):
     the Pydantic module but would need to ensure proper dump and load function.
     """
 
-    original_shape: Optional[tuple[int, ...]] = None
     group_num: int
     scale: Union[list[float], np.ndarray]
-    zeropoint: Optional[Union[list[float], np.ndarray]] = None
     quantized_vector: Union[list[list[int]], np.ndarray]
-    # For the outlier
     outlier_indices: Union[list[list[int]], np.ndarray]
-    model_config = ConfigDict(arbitrary_types_allowed=True)
+    original_shape: Optional[Tuple[int, ...]] = None
+    zeropoint: Optional[Union[list[float], np.ndarray]] = None
 
-    # Force each list to be same length as group_num
-    def __init__(self, **data):
-        """Init.
+    # Optional: If you really need that check, use __post_init__
+    # This runs faster than Pydantic validators because there is no pydantic overhead
+    def __post_init__(self):
+        """Post init.
+
+        Check for the right size of the values.
 
         Raises:
-            ValueError: if the length of any list is not equal to group_num.
+            ValueError: if mismatched dimensions are found. Groups must match
+                group_num.
         """
-        super().__init__(**data)
-        if len(self.scale) != self.group_num:
-            raise ValueError("Length of scale must be equal to group_num.")
-        if self.zeropoint is not None and len(self.zeropoint) != self.group_num:
-            raise ValueError("Length of zeropoint must be equal to group_num.")
-        if len(self.quantized_vector) != self.group_num:
-            raise ValueError("Length of quantized_vector must be equal to group_num.")
-        if len(self.outlier_indices) != self.group_num:
-            raise ValueError("Length of outlier_indices must be equal to group_num.")
+        # Only run this if you suspect bugs in your generation logic
+        if (
+            len(self.scale) != self.group_num
+            or len(self.quantized_vector) != self.group_num
+            or len(self.outlier_indices) != self.group_num
+            or (self.zeropoint is not None and len(self.zeropoint) != self.group_num)
+        ):
+            raise ValueError("Dimensions mismatch")
 
 
 class Auto_AdpQ:
