@@ -10,7 +10,7 @@ A brief description of what your package does.
 from .module import AdpQQuantizedWeights, Auto_AdpQ, AutoAdpQConfig
 
 # Define the package version
-__version__ = "0.2.1"
+__version__ = "0.3.1"
 
 # List of names to expose when a user does `from auto_adpq import *`
 __all__ = ["Auto_AdpQ", "AutoAdpQConfig", "AdpQQuantizedWeights", "__version__"]
