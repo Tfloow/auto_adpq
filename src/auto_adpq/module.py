@@ -130,9 +130,14 @@ class AdpQQuantizedWeights:
             len(self.scale) != self.group_num
             or len(self.quantized_vector) != self.group_num
             or len(self.outlier_indices) != self.group_num
-            or (self.zeropoint is not None and len(self.zeropoint) != self.group_num)
         ):
             raise ValueError("Dimensions mismatch")
+
+        if self.zeropoint is not None:
+            # Meaning it is an array which is not none, can have np.array(None)
+            if type(self.zeropoint) == np.ndarray and self.zeropoint.ndim != 0: 
+                if len(self.zeropoint) != self.group_num:
+                    raise ValueError("Dimensions mismatch for zeropoint")
 
 
 class Auto_AdpQ:
