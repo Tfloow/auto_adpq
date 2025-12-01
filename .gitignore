@@ -4,6 +4,8 @@
 profile.out
 quantized/
 
+tmp_dir/
+
 ### JupyterNotebooks ###
 # gitignore template for Jupyter Notebooks
 # website: http://jupyter.org/

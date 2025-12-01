@@ -30,6 +30,7 @@ dev = [
     "build",
     "ruff",
     "sphinx",
+    "transformers",
     "sphinx-multiversion",
     "furo",
     "twine",

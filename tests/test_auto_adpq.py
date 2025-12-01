@@ -1,7 +1,8 @@
-import numpy as np
+"""Tests for Auto_AdpQ initialization and AdpQQuantizedWeights validation."""
+
 import pytest
 
-from auto_adpq import AutoAdpQConfig, Auto_AdpQ, AdpQQuantizedWeights
+from auto_adpq import AdpQQuantizedWeights, Auto_AdpQ, AutoAdpQConfig
 
 
 def test_auto_adpq_init_with_defaults_and_config():
@@ -22,14 +23,14 @@ def test_auto_adpq_init_with_defaults_and_config():
 def test_auto_adpq_init_raises_on_invalid_group_size():
     """Providing an invalid group_size via config should raise ValueError."""
     with pytest.raises(ValueError):
-        cfg = AutoAdpQConfig(group_size=0)
+        AutoAdpQConfig(group_size=0)
 
     # Too large group_size should also raise
     with pytest.raises(ValueError):
-        cfg2 = AutoAdpQConfig(group_size=2**20)
-    
+        AutoAdpQConfig(group_size=2**20)
+
     with pytest.raises(ValueError):
-        cfg3 = AutoAdpQConfig(n_iters=-10)
+        AutoAdpQConfig(n_iters=-10)
 
 
 def make_valid_adpq_quantized_weights(group_num=2, group_size=4):
@@ -39,13 +40,13 @@ def make_valid_adpq_quantized_weights(group_num=2, group_size=4):
     quantized_vector = [[1, 2, 3, 4] for _ in range(group_num)]
     outlier_indices = [[0] for _ in range(group_num)]
 
-    return dict(
-        group_num=group_num,
-        scale=scale,
-        zeropoint=zeropoint,
-        quantized_vector=quantized_vector,
-        outlier_indices=outlier_indices,
-    )
+    return {
+        "group_num": group_num,
+        "scale": scale,
+        "zeropoint": zeropoint,
+        "quantized_vector": quantized_vector,
+        "outlier_indices": outlier_indices,
+    }
 
 
 def test_adpq_quantized_weights_accepts_valid_payload_and_rejects_bad_lengths():
@@ -59,7 +60,5 @@ def test_adpq_quantized_weights_accepts_valid_payload_and_rejects_bad_lengths():
     for k in key:
         bad = make_valid_adpq_quantized_weights(group_num=3)
         bad[k] = [1.0]  # wrong length
-        print(bad)
-        print(k)
         with pytest.raises(ValueError):
             AdpQQuantizedWeights(**bad)

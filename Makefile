@@ -1,8 +1,10 @@
 all: ruff coverage docs build
 
+RUFF_TO_CHECK= src/ tests/ examples/
+
 ruff:
-	@ruff format src/
-	@ruff check src/ --fix
+	@ruff format $(RUFF_TO_CHECK)
+	@ruff check $(RUFF_TO_CHECK) --fix
 
 # Build the package
 build:

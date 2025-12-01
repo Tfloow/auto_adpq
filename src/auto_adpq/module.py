@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-# replace print with logging
 import logging
 import os
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+
+# replace print with logging
+from glob import glob
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -124,6 +126,8 @@ class AdpQQuantizedWeights:
         Raises:
             ValueError: if mismatched dimensions are found. Groups must match
                 group_num.
+
+        TODO: sometimes when loading from npz, I get zeropoint as np.array(None)
         """
         # Only run this if you suspect bugs in your generation logic
         if (
@@ -135,8 +139,8 @@ class AdpQQuantizedWeights:
 
         if self.zeropoint is not None:
             # Meaning it is an array which is not none, can have np.array(None)
-            if type(self.zeropoint) is np.ndarray and self.zeropoint.ndim != 0:
-                if len(self.zeropoint) != self.group_num:
+            if type(self.zeropoint) is np.ndarray:
+                if self.zeropoint.ndim != 0 and len(self.zeropoint) != self.group_num:
                     raise ValueError("Dimensions mismatch for zeropoint")
             elif len(self.zeropoint) != self.group_num:
                 raise ValueError("Dimensions mismatch for zeropoint")
@@ -793,6 +797,15 @@ class Auto_AdpQ:
                     logger.info(f"Extracting weights for: {name}")
 
                     if module.weight.dtype == torch.bfloat16:
+                        # Throw UserWarning if max value exceeds float16 range
+                        max_val = torch.max(torch.abs(module.weight)).item()
+                        if max_val > 65504:
+                            warnings.warn(
+                                f"Max weight value {max_val} exceeds float16 range. "
+                                "This may lead to overflow during conversion.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
                         weight_array = (
                             module.weight.to(torch.float16).detach().cpu().numpy()
                         )
@@ -822,14 +835,31 @@ class Auto_AdpQ:
             model (torch.nn.Module): The model to be quantized.
                 focus on the QKVO, up, down and gate linear layers.
         """
-        i = 10
+        target_suffixes = (
+            "q_proj",
+            "k_proj",
+            "v_proj",
+            "o_proj",
+            "up_proj",
+            "down_proj",
+            "gate_proj",
+        )
 
         for name, module in model.named_modules():
-            if isinstance(module, torch.nn.Linear):
+            if isinstance(module, torch.nn.Linear) and name.endswith(target_suffixes):
                 logger.info(f"Checking datatype: {name}")
                 # extract weights as numpy array
                 # If Bfloat16, convert to float16 first
                 if module.weight.dtype == torch.bfloat16:
+                    # Throw UserWarning if max value exceeds float16 range
+                    max_val = torch.max(torch.abs(module.weight)).item()
+                    if max_val > 65504:
+                        warnings.warn(
+                            f"Max weight value {max_val} exceeds float16 range. "
+                            "This may lead to overflow during conversion.",
+                            UserWarning,
+                            stacklevel=2,
+                        )
                     weight_array = (
                         module.weight.to(torch.float16).detach().cpu().numpy()
                     )
@@ -840,23 +870,6 @@ class Auto_AdpQ:
                 self.quantized_weights[name] = self.AdpQ_quantize(weight_array)
 
                 logger.info(f"Finished quantizing layer: {name}")
-                if i == 0:
-                    break  # temporary
-                i -= 1
-
-        """for name, module in model.named_modules():
-        if isinstance(module, torch.nn.Linear):
-            print(f"Quantizing layer: {name}")
-            quantized_module = adpq.quantize_module(module)
-            # Replace the original module with the quantized one
-            parent_module = model
-            name_parts = name.split('.')
-            for part in name_parts[:-1]:
-                parent_module = getattr(parent_module, part)
-            setattr(parent_module, name_parts[-1], quantized_module)
-            # Free up memory
-            gc.collect()
-        torch.cuda.empty_cache()"""
 
     def save_pretrained(self, save_directory: str):
         """Save the quantized model in Hugging Face format.
@@ -868,11 +881,41 @@ class Auto_AdpQ:
 
         for name, quantized_weights in self.quantized_weights.items():
             logger.info(f"Saving quantized weights for layer: {name}")
-            weight_filename = os.path.join(
-                save_directory, f"{name.replace('.', '_')}_adpq_quantized.npz"
-            )
             self.save_weights(
                 quantized_weights,
-                filepath=weight_filename.replace("_adpq_quantized.npz", ""),
+                filepath=save_directory,
                 weight_name=name.replace(".", "_"),
             )
+
+    def fuse_model_from_pretrained(self, model: torch.nn.Module, load_directory: str):
+        """Load the quantized model from Hugging Face format.
+
+        Args:
+            model (torch.nn.Module): The PyTorch model to load the weights into.
+            load_directory (str): The directory where the model in ADPQ format is saved.
+        """
+        npz_files = glob(os.path.join(load_directory, "*.npz"))
+
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear):
+                file_name = name.replace(".", "_")
+                npz_path = os.path.join(
+                    load_directory, f"{file_name}_adpq_quantized.npz"
+                )  # I f up the naming
+
+                if any(file_name in f for f in npz_files):
+                    adpq_weight = self.load_weights(npz_path)
+                    new_weight = self.reconstruct_weights(adpq_weight)
+
+                    if new_weight.shape != module.weight.shape:
+                        if new_weight.T.shape == module.weight.shape:
+                            new_weight = new_weight.T
+                        else:
+                            continue
+
+                    # Convert to torch tensor first
+                    new_weight = torch.tensor(new_weight)
+
+                    module.weight.data = new_weight.to(
+                        device=module.weight.device, dtype=module.weight.dtype
+                    )
