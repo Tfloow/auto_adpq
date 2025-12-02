@@ -90,12 +90,14 @@ def quantize_save_compare(multi_threaded=False):
             weight_array = module.weight
             weight_array_ref = model_ref.get_submodule(name).weight
             
-            """fig, axs = plt.subplots(1, 3, figsize=(15, 5))
-
             weight_array_numpy = weight_array.to(torch.float32).detach().cpu().numpy()
             weight_array_ref_numpy = (
                 weight_array_ref.to(torch.float32).detach().cpu().numpy()
             )
+            
+            """fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+
+            
             fig.colorbar(
                 axs[0].imshow(weight_array_numpy, cmap="viridis", aspect="auto"),
                 ax=axs[0],
@@ -106,10 +108,7 @@ def quantize_save_compare(multi_threaded=False):
                 axs[1].imshow(weight_array_ref_numpy, cmap="viridis", aspect="auto"),
                 ax=axs[1],
             )
-            np.save(
-                f"tests/weights/random_array/{name.replace('.', '_')}_ref.npy",
-                weight_array_ref_numpy,
-            )
+
             axs[1].set_title(f"Weights of {name} (Reference)")
 
             diff = np.abs(weight_array_numpy / weight_array_ref_numpy)
@@ -118,6 +117,11 @@ def quantize_save_compare(multi_threaded=False):
 
             # plt.show()
             plt.close()"""
+            
+            np.save(
+                f"tests/weights/random_array/{name.replace('.', '_')}_ref.npy",
+                weight_array_ref_numpy,
+            )
 
             assert torch.allclose(weight_array, weight_array_ref, rtol=tol, atol=tol), (
                 f"Weights for module {name} differ more than {tol * 100:.2f}%"

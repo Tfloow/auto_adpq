@@ -49,7 +49,6 @@ This model was quantized to reduce VRAM usage and increase inference speed while
 * **Quantization Method:** ADPQ (Adaptive Quantization with data-free calibration)
 * **Precision:** 4-bit
 * **Simulated:** Yes
-* **Target Hardware:** Compatible with consumer GPUs (e.g., RTX 3060/4090)
 
 ## How to Use
 
