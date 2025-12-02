@@ -3,15 +3,27 @@
 import glob
 import os
 
+import model_card
 import torch
 from transformers import AutoModelForCausalLM
 
 from auto_adpq import Auto_AdpQ, AutoAdpQConfig
 
-DUMMY_LLAMA = True
+with open(".env", "r") as f:
+    for line in f:
+        if line.startswith("HF_TOKEN="):
+            hf_token = line.strip().split("=")[1]
+            os.environ["HF_TOKEN"] = hf_token
+            break
+
+DUMMY_LLAMA = False
+SMALL_LLAMA = True
 if DUMMY_LLAMA:
     model_name = "tiny-random/llama-3"  # tiny model based on llama-3 for testing
     group_size = 8
+elif SMALL_LLAMA:
+    model_name = "meta-llama/Llama-3.2-1B"  # small llama-3 for testing
+    group_size = 128
 else:
     model_name = "meta-llama/Llama-3.1-8B"
 
@@ -27,11 +39,11 @@ else:
         model_name = save_path
     group_size = 128
 
-
+# START
 # Setup Auto-AdpQ configuration
 adpq_config = AutoAdpQConfig(
     group_size=group_size,
-    n_iters=20,  # Seems quite slow otherwise
+    n_iters=30,  # Seems quite slow otherwise
     alpha=0.08,
     device="cpu",
     q_bit=4,
@@ -51,11 +63,25 @@ quantized_model = adpq.quantize_model_multithreaded(model, max_workers=16)
 adpq.save_pretrained("quantized/")
 adpq.fuse_model_from_pretrained(model, "quantized/")
 
-with open(".env", "r") as f:
-    for line in f:
-        if line.startswith("HF_TOKEN="):
-            hf_token = line.strip().split("=")[1]
-            os.environ["HF_TOKEN"] = hf_token
-            break
-
 model.push_to_hub(f"Tfloow/{model_name.split('/')[-1]}-adpq-4bit-sim")
+# END
+
+# Read this file and trim between START and END tag
+with open(__file__, "r") as f:
+    code_lines = f.readlines()
+    how_to_quantize = []
+    recording = False
+    for line in code_lines:
+        if line.strip() == "# START":
+            recording = True
+            continue
+        if line.strip() == "# END":
+            recording = False
+            continue
+        if recording:
+            how_to_quantize.append(line.rstrip())
+
+model_card.generate_model_card(
+    model_name=model_name,
+    how_to_quantize="\n".join(how_to_quantize),
+)

@@ -76,7 +76,8 @@ class AutoAdpQConfig(BaseModel):
         super().__init__(**kwargs)
         if self.data_packing:
             logger.info(
-                "Knwown issue: Data packing is not fully supported yet and cause wrong values."
+                "Knwown issue: Data packing is not fully supported yet and\
+                cause wrong values."
             )
         if self.group_size <= 0:
             raise ValueError("group_size must be a positive integer.")

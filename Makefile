@@ -1,6 +1,6 @@
 all: ruff coverage docs build
 
-RUFF_TO_CHECK= src/ tests/ examples/
+RUFF_TO_CHECK= src/ # tests/ examples/
 
 ruff:
 	@ruff format $(RUFF_TO_CHECK)

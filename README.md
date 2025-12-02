@@ -18,6 +18,7 @@ multi-version docs), and contribute.
   - [Documentation](#documentation)
     - [Building the documentation](#building-the-documentation)
   - [Tasklist](#tasklist)
+  - [Quantized models](#quantized-models)
   - [Contributing](#contributing)
   - [Development notes](#development-notes)
   - [License](#license)
@@ -128,9 +129,16 @@ Notes about versions
 
 ## Tasklist
 
+- [ ] Solve the datapacking issue #1
 - [ ] Optimize pydantic module `AdpQQuantizedWeights`
   - Currently, there is a major overhead when creating a new object to validate the field. Since it is used internally only, we could ditch the Pydantic module but would need to ensure proper dump and load function
 - [ ] Support model and integrate with `.safetensors`
+
+## Quantized models
+
+Pre-quantized models are available in this [collection](https://huggingface.co/collections/Tfloow/adpq). They are *simulated* models meaning they are stored as `bf16` values instead of the quantized versions. If I stored them in the custom format, I would either need an algorithm to reconstruct the weights in full at runtime or develop a custom CUDA kernel, which is quite tough.
+
+Nonetheless, those models represent the quality and rounding errors that a typical quantized model can meet.
 
 ## Contributing
 
