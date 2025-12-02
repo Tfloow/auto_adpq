@@ -4,6 +4,8 @@
 profile.out
 quantized/
 
+weights/
+
 tmp_dir/
 
 ### JupyterNotebooks ###

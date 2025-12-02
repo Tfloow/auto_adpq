@@ -48,6 +48,10 @@ markers = [
 testpaths = [
     "tests"
 ]
+markers = [
+    "run_first: run this test before others",
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 
 # ====================================================================

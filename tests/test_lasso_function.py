@@ -8,7 +8,7 @@ from auto_adpq import Auto_AdpQ, AutoAdpQConfig
 def test_slow_fast():
     """Comparing different implementations of outlier detection."""
     matrix = np.load(
-        "tests/weights/llama-8B/model.layers.0.self_attn.q_proj.weight.npy"
+        "tests/weights/random_array/model_layers_0_mlp_down_proj_ref.npy"
     )
 
     config = AutoAdpQConfig()

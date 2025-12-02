@@ -5,10 +5,10 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+import pytest
 from transformers import AutoModelForCausalLM
 
 from auto_adpq import Auto_AdpQ, AutoAdpQConfig
-
 
 def quantize_save_compare(multi_threaded=False):
     """Quantize a model, save and reload, compare weights."""
@@ -27,6 +27,7 @@ def quantize_save_compare(multi_threaded=False):
     else:
         adpq.quantize_model(model)
     os.makedirs(path, exist_ok=True)
+    os.makedirs("tests/weights/random_array/pickle", exist_ok=True)
 
     for name in adpq.quantized_weights.keys():
         # name is like 'model.layers.0.self_attn.q_proj'
@@ -43,7 +44,7 @@ def quantize_save_compare(multi_threaded=False):
                 "wb",
             ) as f:
                 pickle.dump(adpq.quantized_weights[name], f)
-
+                
             with open(
                 f"tests/weights/random_array/pickle/{name.replace('.', '_')}_ref.pkl",
                 "wb",
@@ -86,9 +87,10 @@ def quantize_save_compare(multi_threaded=False):
     # Compare weights
     for name, module in model.named_modules():
         if isinstance(module, torch.nn.Linear):
-            fig, axs = plt.subplots(1, 3, figsize=(15, 5))
             weight_array = module.weight
             weight_array_ref = model_ref.get_submodule(name).weight
+            
+            """fig, axs = plt.subplots(1, 3, figsize=(15, 5))
 
             weight_array_numpy = weight_array.to(torch.float32).detach().cpu().numpy()
             weight_array_ref_numpy = (
@@ -115,14 +117,15 @@ def quantize_save_compare(multi_threaded=False):
             fig.colorbar(axs[2].imshow(diff, cmap="viridis", aspect="auto"), ax=axs[2])
 
             # plt.show()
-            plt.close()
+            plt.close()"""
 
             assert torch.allclose(weight_array, weight_array_ref, rtol=tol, atol=tol), (
                 f"Weights for module {name} differ more than {tol * 100:.2f}%"
             )
-
+@pytest.mark.run_first
 def test_quantize_save_compare_multithreaded():
     quantize_save_compare(multi_threaded=True)
     
+@pytest.mark.run_first
 def test_quantize_save_compare_singlethreaded():
     quantize_save_compare(multi_threaded=False)

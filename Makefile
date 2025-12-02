@@ -32,6 +32,9 @@ docs-mv: docs
 
 clean:
 	@rm -rf dist/
+	@rm -rf __pycache__/
+	@rm -rf auto_adpq_debug.log
+	@rm -rf profile.out
 	@rm -rf build/
 	@rm -rf src/auto_adpq.egg-info/
 	@rm -rf docs/_build/
@@ -43,3 +46,8 @@ clean:
 	@rm -rf coverage.xml
 	@rm -rf src/auto_adpq/__pycache__/
 	@rm -rf src/auto_adpq/tests/__pycache__/
+	@rm -rf tests/__pycache__/
+	@rm -rf examples/__pycache__/
+	@rm -rf quantized/
+	@rm -rf tmp_dir/
+	@rm -rf tests/weights/
