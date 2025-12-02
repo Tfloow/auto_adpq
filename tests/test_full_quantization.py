@@ -184,7 +184,7 @@ def test_save_and_load_quantized_weights():
         group_num=2,
         scale=np.array([0.1, 0.2]),
         zeropoint=np.array([0.0, 0.0]),
-        quantized_vector=np.array([[1, 2, 3, 4], [5, 6, 7, 8]]),
+        quantized_vector=np.array([[1, 2, 3, 4], [5, 6, 7, 7]]),
         outlier_indices=np.array([[0], [1]]),
     )
 

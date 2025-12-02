@@ -58,6 +58,15 @@ def quantize_save_compare(multi_threaded=False):
             assert torch.allclose(w, w_ref, rtol=0.15, atol=0.15), (
                 f"Weights for module {name} differ more than 15% after quantization."
             )
+            
+            # Test the pack unpack
+            tmp = adpq.quantized_weights[name].quantized_vector[0,0:4]
+            packed = adpq.pack_bits(adpq.quantized_weights[name].quantized_vector)
+            
+            unpacked = adpq.unpack_bits(packed)
+            assert np.array_equal(unpacked, adpq.quantized_weights[name].quantized_vector), (
+                f"Pack/unpack failed for module {name}"
+            )
     # TODO: something is going wrong after this line
     # Save the quantized model
     adpq.save_pretrained(path)

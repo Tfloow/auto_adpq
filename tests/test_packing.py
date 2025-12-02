@@ -16,16 +16,16 @@ def test_packing_weights():
     # Create a simple matrix to quantize
     matrix = np.array(
         [
-            [1, 2, 3, 4, 5, 6, 7, 8],
-            [8, 7, 6, 5, 4, 3, 2, 1],
+            [-4, -3, -2, -1, 1, 2, 3, 4],
+            [7, 7, 6, 5, 4, 3, 2, 1],
         ],
-        dtype=np.uint8,
+        dtype=np.int8,
     )
 
     expected_packed_weights = np.array(
         [
-            [1 | (2 << 4) | (3 << 8) | (4 << 12), 5 | (6 << 4) | (7 << 8) | (8 << 12)],
-            [8 | (7 << 4) | (6 << 8) | (5 << 12), 4 | (3 << 4) | (2 << 8) | (1 << 12)],
+            [0b1111111011011100, 1 | (2 << 4) | (3 << 8) | (4 << 12)],
+            [7 | (7 << 4) | (6 << 8) | (5 << 12), 4 | (3 << 4) | (2 << 8) | (1 << 12)],
         ],
         dtype=np.uint16,
     )  # Example packed representation
@@ -35,12 +35,14 @@ def test_packing_weights():
     )
 
     packed_weights = auto_adpq.pack_bits(matrix)
-
-    assert np.array_equal(packed_weights, expected_packed_weights)
+    assert np.array_equal(packed_weights, expected_packed_weights), "Mismatch in packed weights."
 
     unpacked_weights = auto_adpq.unpack_bits(packed_weights)
 
-    assert np.array_equal(unpacked_weights, matrix)
+    print("Original Weights:\n", matrix)
+    print("Unpacked Weights:\n", unpacked_weights)
+    
+    assert np.array_equal(unpacked_weights, matrix), "Mismatch in unpacked weights."
 
 
 @pytest.mark.skip(

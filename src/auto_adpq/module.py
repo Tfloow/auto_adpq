@@ -63,7 +63,7 @@ class AutoAdpQConfig(BaseModel):
     alpha: float = 0.08
     device: str = "cpu"
     q_bit: int = 4
-    data_packing: bool = False
+    data_packing: bool = True
     symmetrical_quantization: bool = True
 
     def __init__(self, **kwargs):
@@ -354,7 +354,11 @@ class Auto_AdpQ:
             for i in range(packed_weights.shape[1]):
                 packed_value = packed_weights[row, i]
                 for j in range(weights_per_int16):
-                    q_value = (packed_value >> (j * self.q_bit)) & mask
+                    tmp = packed_value >> (j * self.q_bit)
+                    q_value = tmp & mask
+                    # Handle sign
+                    if tmp & (0b1 << (self.q_bit - 1)):
+                        q_value = -np.int8((~q_value + 1) & mask)
                     unpacked_array[row, i * weights_per_int16 + j] = q_value
 
         return unpacked_array
