@@ -2,8 +2,8 @@
 
 import glob
 import os
-import torch
 
+import torch
 from transformers import AutoModelForCausalLM
 
 from auto_adpq import Auto_AdpQ, AutoAdpQConfig
@@ -35,16 +35,14 @@ adpq_config = AutoAdpQConfig(
     alpha=0.08,
     device="cpu",
     q_bit=4,
-    data_packing=True,
+    data_packing=False,
     symmetrical_quantization=True,
 )
 
 adpq = Auto_AdpQ(config=adpq_config)
 
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name, torch_dtype=torch.bfloat16
-)
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 
 print(model.dtype)
 
@@ -60,4 +58,4 @@ with open(".env", "r") as f:
             os.environ["HF_TOKEN"] = hf_token
             break
 
-model.push_to_hub(f"Tfloow/{model_name.split('/')[-1]}-adpq-4bit-sim") 
+model.push_to_hub(f"Tfloow/{model_name.split('/')[-1]}-adpq-4bit-sim")

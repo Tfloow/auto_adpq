@@ -63,7 +63,7 @@ class AutoAdpQConfig(BaseModel):
     alpha: float = 0.08
     device: str = "cpu"
     q_bit: int = 4
-    data_packing: bool = True
+    data_packing: bool = False
     symmetrical_quantization: bool = True
 
     def __init__(self, **kwargs):
@@ -74,12 +74,35 @@ class AutoAdpQConfig(BaseModel):
             ValueError: if n_iters is not positive.
         """
         super().__init__(**kwargs)
+        if self.data_packing:
+            logger.info(
+                "Knwown issue: Data packing is not fully supported yet and cause wrong values."
+            )
         if self.group_size <= 0:
             raise ValueError("group_size must be a positive integer.")
         if self.n_iters <= 0:
             raise ValueError("n_iters must be a positive integer.")
         if self.group_size > 2**16:
             raise ValueError("group_size too large, must be less than 65536.")
+
+    def __eq__(self, value: AutoAdpQConfig) -> bool:
+        """Check equality for the object.
+
+        Args:
+            value (AutoAdpQConfig): Another AutoAdpQConfig instance to compare.
+
+        Returns:
+            bool: True if all configuration attributes are equal, False otherwise.
+        """
+        return (
+            self.group_size == value.group_size
+            and self.n_iters == value.n_iters
+            and self.alpha == value.alpha
+            and self.device == value.device
+            and self.q_bit == value.q_bit
+            and self.data_packing == value.data_packing
+            and self.symmetrical_quantization == value.symmetrical_quantization
+        )
 
 
 @dataclass(frozen=True)  # frozen=True makes it immutable (optional but safer)
@@ -420,6 +443,8 @@ class Auto_AdpQ:
                 to save.
             weight_name (str): The name of the weight matrix.
             filepath (str): The path to the file where the weights will be saved.
+
+        TODO: Data packing fails at the moment!
         """
         quantized_vectors = adpq_quantized_weights.quantized_vector.reshape(
             adpq_quantized_weights.original_shape
@@ -914,8 +939,6 @@ class Auto_AdpQ:
                             continue
 
                     # Convert to torch tensor first
-                    new_weight = torch.tensor(new_weight)
+                    new_weight = torch.tensor(new_weight).to(torch.bfloat16)
 
-                    module.weight.data = new_weight.to(
-                        device=module.weight.device, dtype=module.weight.dtype
-                    )
+                    module.weight.data = new_weight

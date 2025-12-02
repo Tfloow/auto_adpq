@@ -13,7 +13,7 @@ from auto_adpq import Auto_AdpQ, AutoAdpQConfig
 def test_quantize_save_compare():
     """Quantize a model, save and reload, compare weights."""
     model_name = "tiny-random/llama-3"  # tiny model based on llama-3 for testing
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 
     # Instantiate Auto_AdpQ with default config
     adpq_config = AutoAdpQConfig(group_size=8)
@@ -32,6 +32,21 @@ def test_quantize_save_compare():
             raise AssertionError(f"Quantized weights for module {name} not found.")
         else:
             w_ref = model.get_submodule(name).weight
+            # save pickled weights for debugging
+            import pickle
+
+            with open(
+                f"tests/weights/random_array/pickle/{name.replace('.', '_')}_adpq_quantized.pkl",
+                "wb",
+            ) as f:
+                pickle.dump(adpq.quantized_weights[name], f)
+
+            with open(
+                f"tests/weights/random_array/pickle/{name.replace('.', '_')}_ref.pkl",
+                "wb",
+            ) as f:
+                pickle.dump(w_ref, f)
+
             w = torch.tensor(adpq.reconstruct_weights(adpq.quantized_weights[name])).to(
                 w_ref.dtype
             )
@@ -43,59 +58,62 @@ def test_quantize_save_compare():
     # Save the quantized model
     adpq.save_pretrained(path)
 
+    # Load from path and compare weights
+    for name in adpq.quantized_weights.keys():
+        w_ref = model.get_submodule(name).weight
+
+        w_loaded = adpq.load_weights(
+            os.path.join(path, f"{name.replace('.', '_')}_adpq_quantized.npz")
+        )
+        w_loaded = adpq.reconstruct_weights(w_loaded)
+        w_loaded = torch.tensor(w_loaded).to(w_ref.dtype)
+
+        assert torch.allclose(w_loaded, w_ref, rtol=0.15, atol=0.15), (
+            f"Weights for module {name} differ more than 15% after loading."
+        )
+
     # Load the quantized model into a new model instance
     adpq.fuse_model_from_pretrained(model, path)
 
-    model_ref = AutoModelForCausalLM.from_pretrained(model_name)
+    model_ref = AutoModelForCausalLM.from_pretrained(
+        model_name, torch_dtype=torch.bfloat16
+    )
 
     tol = 0.15  # % - due to quantization error
     # Compare weights
     for name, module in model.named_modules():
         if isinstance(module, torch.nn.Linear):
             fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+            weight_array = module.weight
+            weight_array_ref = model_ref.get_submodule(name).weight
 
-            if module.weight.dtype == torch.bfloat16:
-                weight_array = module.weight.to(torch.float16).detach().cpu().numpy()
-                weight_array_ref = (
-                    model_ref.get_submodule(name)
-                    .weight.to(torch.float16)
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-            else:
-                weight_array_ref = (
-                    model.get_submodule(name).weight.detach().cpu().numpy()
-                )
-                weight_array = (
-                    module.weight.to(model.get_submodule(name).weight.dtype)
-                    .detach()
-                    .cpu()
-                    .numpy()
-                )
-
+            weight_array_numpy = weight_array.to(torch.float32).detach().cpu().numpy()
+            weight_array_ref_numpy = (
+                weight_array_ref.to(torch.float32).detach().cpu().numpy()
+            )
             fig.colorbar(
-                axs[0].imshow(weight_array, cmap="viridis", aspect="auto"), ax=axs[0]
+                axs[0].imshow(weight_array_numpy, cmap="viridis", aspect="auto"),
+                ax=axs[0],
             )
             axs[0].set_title(f"Weights of {name} (Quantized)")
 
             fig.colorbar(
-                axs[1].imshow(weight_array_ref, cmap="viridis", aspect="auto"),
+                axs[1].imshow(weight_array_ref_numpy, cmap="viridis", aspect="auto"),
                 ax=axs[1],
             )
             np.save(
                 f"tests/weights/random_array/{name.replace('.', '_')}_ref.npy",
-                weight_array_ref,
+                weight_array_ref_numpy,
             )
             axs[1].set_title(f"Weights of {name} (Reference)")
 
-            diff = np.abs(weight_array / weight_array_ref)
+            diff = np.abs(weight_array_numpy / weight_array_ref_numpy)
             axs[2].set_title(f"Difference of {name}")
             fig.colorbar(axs[2].imshow(diff, cmap="viridis", aspect="auto"), ax=axs[2])
 
             # plt.show()
             plt.close()
 
-            assert np.allclose(weight_array, weight_array_ref, rtol=tol, atol=tol), (
+            assert torch.allclose(weight_array, weight_array_ref, rtol=tol, atol=tol), (
                 f"Weights for module {name} differ more than {tol * 100:.2f}%"
             )
