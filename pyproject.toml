@@ -34,7 +34,8 @@ dev = [
     "sphinx-multiversion",
     "furo",
     "twine",
-    "snakeviz"
+    "snakeviz",
+    "matplotlib",
 ]
 
 
