@@ -84,3 +84,14 @@ fix = true
 
 [tool.ruff.lint.pydocstyle]
 convention="google"
+
+[tool.coverage.run]
+# Only check coverage for code inside your package folder
+source = ["src"] 
+# OR if your code isn't in src, use: source = ["auto_adpq"]
+
+# Explicitly exclude temp files
+omit = [
+    "/tmp/*",
+    "*/tmp/*"
+]

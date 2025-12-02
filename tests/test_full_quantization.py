@@ -83,7 +83,7 @@ def test_random():
         adpq = Auto_AdpQ(
             group_size=group_size,
             alpha=alpha,
-            n_iters=50,
+            n_iters=70,
             q_bit=4,
             data_packing=False,
         )

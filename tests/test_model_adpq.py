@@ -10,7 +10,7 @@ from transformers import AutoModelForCausalLM
 from auto_adpq import Auto_AdpQ, AutoAdpQConfig
 
 
-def test_quantize_save_compare():
+def quantize_save_compare(multi_threaded=False):
     """Quantize a model, save and reload, compare weights."""
     model_name = "tiny-random/llama-3"  # tiny model based on llama-3 for testing
     model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
@@ -22,7 +22,10 @@ def test_quantize_save_compare():
     path = "tmp_dir/"
 
     # Quantize the model
-    adpq.quantize_model(model)
+    if multi_threaded:
+        adpq.quantize_model_multithreaded(model, max_workers=4)
+    else:
+        adpq.quantize_model(model)
     os.makedirs(path, exist_ok=True)
 
     for name in adpq.quantized_weights.keys():
@@ -117,3 +120,9 @@ def test_quantize_save_compare():
             assert torch.allclose(weight_array, weight_array_ref, rtol=tol, atol=tol), (
                 f"Weights for module {name} differ more than {tol * 100:.2f}%"
             )
+
+def test_quantize_save_compare_multithreaded():
+    quantize_save_compare(multi_threaded=True)
+    
+def test_quantize_save_compare_singlethreaded():
+    quantize_save_compare(multi_threaded=False)
