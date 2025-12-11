@@ -53,6 +53,8 @@ class AutoAdpQConfig(BaseModel):
         symmetrical_quantization (bool): If True, use symmetric quantization
             (no zeropoint). If False, use asymmetric quantization with
             zeropoints.
+        target_layers (Optional[Tuple[str, ...]]): Tuple of layer names to
+            quantize. If None, all linear layers are quantized.
 
     Raises:
         ValueError: If `group_size` or `n_iters` are out of valid ranges.
@@ -65,6 +67,15 @@ class AutoAdpQConfig(BaseModel):
     q_bit: int = 4
     data_packing: bool = True
     symmetrical_quantization: bool = True
+    target_layers: Optional[Tuple[str, ...]] = (
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "up_proj",
+        "down_proj",
+        "gate_proj",
+    )
 
     def __init__(self, **kwargs):
         """Init ADPQ config.
@@ -177,6 +188,16 @@ class Auto_AdpQ:
     separate quantization of non-outlier and outlier values, and packaging of
     the quantized representation into :class:`AdpQQuantizedWeights`.
     """
+
+    linear_target_layers = (
+        "q_proj",
+        "k_proj",
+        "v_proj",
+        "o_proj",
+        "up_proj",
+        "down_proj",
+        "gate_proj",
+    )
 
     def __init__(
         self,
@@ -715,6 +736,10 @@ class Auto_AdpQ:
             )
 
         outlier_indices, n_outlier = self._optimization_function(matrix, new)
+        logger.info(
+            f"Lasso outlier detection converged.\
+            {n_outlier / n_item * 100:.2f}% outliers found."
+        )
 
         return outlier_indices, n_outlier / n_item
 
@@ -795,6 +820,23 @@ class Auto_AdpQ:
             outlier_indices=outlier_indices,
         )
 
+    def quantize_reconstruct(
+        self, matrix: Union[list[float], np.ndarray, torch.Tensor]
+    ) -> np.ndarray:
+        """Quantize and reconstruct a matrix using AdpQ.
+
+        Args:
+            matrix (Union[list, np.ndarray, torch.Tensor]): Input weight
+                matrix. The method reshapes the input to ``(-1, group_size)``
+                and processes each group independently.
+
+        Returns:
+            np.ndarray: Reconstructed matrix after quantization.
+        """
+        adpq_quantized_weights = self.AdpQ_quantize(matrix)
+        reconstructed_matrix = self.reconstruct_weights(adpq_quantized_weights)
+        return reconstructed_matrix
+
     def quantize_model_multithreaded(
         self, model: torch.nn.Module, max_workers: int = 4
     ):
@@ -805,6 +847,13 @@ class Auto_AdpQ:
             max_workers: Limit threads to avoid OOM (Out of Memory).
                          Set to 4-8 for desktop, higher for servers.
         """
+        warnings.warn(
+            "Deprecated: Use `apply_quantization` if you want to\
+            quantize a full model easily.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         target_suffixes = (
             "q_proj",
             "k_proj",
@@ -865,15 +914,17 @@ class Auto_AdpQ:
             model (torch.nn.Module): The model to be quantized.
                 focus on the QKVO, up, down and gate linear layers.
         """
-        target_suffixes = (
-            "q_proj",
-            "k_proj",
-            "v_proj",
-            "o_proj",
-            "up_proj",
-            "down_proj",
-            "gate_proj",
+        warnings.warn(
+            "Deprecated: Use `apply_quantization` if you want to\
+            quantize a full model easily.",
+            DeprecationWarning,
+            stacklevel=2,
         )
+
+        if self.cfg.target_layers is not None:
+            target_suffixes = tuple(self.cfg.target_layers)
+        else:
+            target_suffixes = self.linear_target_layers
 
         for name, module in model.named_modules():
             if isinstance(module, torch.nn.Linear) and name.endswith(target_suffixes):
@@ -947,3 +998,80 @@ class Auto_AdpQ:
                     new_weight = torch.tensor(new_weight).to(torch.bfloat16)
 
                     module.weight.data = new_weight
+
+    @classmethod
+    def apply_quantization(
+        cls, model: torch.nn.Module, config: AutoAdpQConfig, multi_threaded: int = 1
+    ):
+        """Apply quantization to a model given a configuration.
+
+        Args:
+            model (torch.nn.Module): The model to be quantized.
+            config (AutoAdpQConfig): Configuration for quantization.
+            multi_threaded (int): Whether to use multi-threaded quantization.
+                Default to 1, single-threaded is used. else, specify the number
+                of threads.
+        """
+        quantizer = cls(config=config)
+
+        if quantizer.cfg.target_layers is not None:
+            target_suffixes = tuple(quantizer.cfg.target_layers)
+        else:
+            target_suffixes = quantizer.linear_target_layers
+
+        future_to_module = {}
+
+        logger.info(f"Starting threaded quantization with {multi_threaded} workers...")
+
+        with ThreadPoolExecutor(max_workers=multi_threaded) as executor:
+            for name, module in model.named_modules():
+                if isinstance(module, torch.nn.Linear) and name.endswith(
+                    target_suffixes
+                ):
+                    logger.info(f"Checking datatype: {name}")
+                    # extract weights as numpy array
+                    # If Bfloat16, convert to float16 first
+                    if module.weight.dtype == torch.bfloat16:
+                        # Throw UserWarning if max value exceeds float16 range
+                        max_val = torch.max(torch.abs(module.weight)).item()
+                        if max_val > 65504:
+                            warnings.warn(
+                                f"Max weight value {max_val} exceeds float16 range. "
+                                "This may lead to overflow during conversion.",
+                                UserWarning,
+                                stacklevel=2,
+                            )
+                        weight_array = (
+                            module.weight.to(torch.float16).detach().cpu().numpy()
+                        )
+                    else:
+                        weight_array = module.weight.detach().cpu().numpy()
+
+                    logger.info(f"Quantizing & Reconstructing layer: {name}")
+                    future = executor.submit(
+                        quantizer.quantize_reconstruct, weight_array
+                    )
+                    future_to_module[future] = (name, module)
+
+            # 2. COLLECTION PHASE
+            for future in as_completed(future_to_module):
+                layer_name, layer_module = future_to_module[
+                    future
+                ]  # Retrieve correct module
+
+                try:
+                    result = future.result()
+
+                    # Convert result back to tensor
+                    original_device = layer_module.weight.device
+                    new_weight = torch.tensor(
+                        result, dtype=torch.bfloat16, device=original_device
+                    )
+
+                    # Assign to the correct module instance
+                    layer_module.weight.data = new_weight
+
+                    logger.info(f"✅ Finished Loading: {layer_name}")
+
+                except Exception as exc:
+                    logger.error(f"❌ Exception in layer {layer_name}: {exc}")

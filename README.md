@@ -1,4 +1,4 @@
-[![Docs](https://img.shields.io/badge/Docs-latest-blue?logo=readme&logoColor=f5f5f5)](https://auto-adpq.readthedocs.io/en/latest/) [![Paper](https://img.shields.io/badge/Paper-2405.13358-B31B1B?logo=arxiv&logoColor=f5f5f5)](https://arxiv.org/abs/2405.13358) [![PyPI](https://img.shields.io/badge/PyPi-0.3.4-3775A9?logo=pypi&logoColor=f5f5f5)](https://pypi.org/project/auto-adpq/) [![CI](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml) [![Build and Release](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml) 
+[![Docs](https://img.shields.io/badge/Docs-latest-blue?logo=readme&logoColor=f5f5f5)](https://auto-adpq.readthedocs.io/en/latest/) [![Paper](https://img.shields.io/badge/Paper-2405.13358-B31B1B?logo=arxiv&logoColor=f5f5f5)](https://arxiv.org/abs/2405.13358) [![PyPI](https://img.shields.io/badge/PyPi-0.3.4-3775A9?logo=pypi&logoColor=f5f5f5)](https://pypi.org/project/auto-adpq/)  [![HF](https://img.shields.io/badge/HuggingFace-collection-FFD21E?logo=huggingface&logoColor=f5f5f5)](https://huggingface.co/collections/Tfloow/adpq) [![CI](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml) [![Build and Release](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml) 
 
 # auto_adpq
 
@@ -62,6 +62,8 @@ from auto_adpq import Auto_AdpQ
 
 Add a short usage snippet here specific to the package functions you expect
 users to try first.
+
+The most simple way to quantize a model is to follow a similar script as in [examples/simple_quantization.py](examples/simple_quantization.py).
 
 ## Running tests & linters
 
@@ -129,7 +131,7 @@ Notes about versions
 
 ## Tasklist
 
-- [ ] Solve the datapacking issue #1
+- [x] Solve the datapacking issue #1
 - [ ] Optimize pydantic module `AdpQQuantizedWeights`
   - Currently, there is a major overhead when creating a new object to validate the field. Since it is used internally only, we could ditch the Pydantic module but would need to ensure proper dump and load function
 - [ ] Support model and integrate with `.safetensors`
@@ -139,6 +141,16 @@ Notes about versions
 Pre-quantized models are available in this [collection](https://huggingface.co/collections/Tfloow/adpq). They are *simulated* models meaning they are stored as `bf16` values instead of the quantized versions. If I stored them in the custom format, I would either need an algorithm to reconstruct the weights in full at runtime or develop a custom CUDA kernel, which is quite tough.
 
 Nonetheless, those models represent the quality and rounding errors that a typical quantized model can meet.
+
+| model                                          |    PPL |
+| :--------------------------------------------- | -----: |
+| unsloth/Meta-Llama-3.1-8B                      | 4.8693 |
+| unsloth/Meta-Llama-3.1-8B-bnb-4bit             | 5.0733 |
+| Tfloow/Meta-Llama-3.1-8B-weights-adpq-4bit-sim | 5.3671 |
+| ----                                           |   ---- |
+| unsloth/Meta-Llama-3.2-1B                      | 6.5546 |
+| unsloth/Meta-Llama-3.2-1B-bnb-4bit             | 6.9971 |
+| unsloth/Meta-Llama-3.2-1B-adpq                 | 7.5700 |
 
 ## Contributing
 

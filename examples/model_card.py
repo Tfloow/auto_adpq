@@ -1,7 +1,7 @@
 from huggingface_hub import ModelCard, ModelCardData
 
 
-def generate_model_card(model_name: str, how_to_quantize: str):
+def generate_model_card(model_name: str, how_to_quantize: str, repo_id: str = None):
     """Generates and pushes a model card to the Hugging Face Hub for a quantized model.
 
     Args:
@@ -9,7 +9,6 @@ def generate_model_card(model_name: str, how_to_quantize: str):
         how_to_quantize (str): A code snippet demonstrating how the model was quantized.
     """
     # 1. Define your Repo ID (Must match where you pushed the model)
-    repo_id = f"Tfloow/{model_name.split('/')[-1]}-adpq-4bit-sim"
 
     # 2. Define the Metadata (YAML tags used for filtering on HF)
     card_data = ModelCardData(
@@ -72,11 +71,15 @@ print(tokenizer.decode(output[0]))
 
 ### Performance
 
-|model|PPL|
-|:---|---:|
-|unsloth/Meta-Llama-3.2-1B|6.5546|
-|unsloth/Meta-Llama-3.2-1B-bnb-4bit|6.9971|
-|unsloth/Meta-Llama-3.2-1B-adpq|7.5700|
+| model                                          |    PPL |
+| :--------------------------------------------- | -----: |
+| unsloth/Meta-Llama-3.1-8B                      | 4.8693 |
+| unsloth/Meta-Llama-3.1-8B-bnb-4bit             | 5.0733 |
+| Tfloow/Meta-Llama-3.1-8B-weights-adpq-4bit-sim | 5.3671 |
+| ----                                           |   ---- |
+| unsloth/Meta-Llama-3.2-1B                      | 6.5546 |
+| unsloth/Meta-Llama-3.2-1B-bnb-4bit             | 6.9971 |
+| unsloth/Meta-Llama-3.2-1B-adpq                 | 7.5700 |
 
 ### How was the model quantized?
 
@@ -92,8 +95,6 @@ model_name = "{model_name}"
 {how_to_quantize}
 ```
     """
-
-    print(content)
 
     card = ModelCard(content)
     card.push_to_hub(repo_id)
