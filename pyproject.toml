@@ -12,6 +12,7 @@ requires-python = ">=3.10"
 dependencies = [
     "torch",
     "numpy",
+    "tqdm",
     "pydantic>=1.10"
 ]
 

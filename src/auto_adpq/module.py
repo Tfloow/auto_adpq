@@ -5,8 +5,10 @@ from __future__ import annotations
 import logging
 import os
 import warnings
+warnings.filterwarnings("always", category=UserWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from tqdm import tqdm
 
 # replace print with logging
 from glob import glob
@@ -671,14 +673,17 @@ class Auto_AdpQ:
             fx2 = fx2 - target_outlier
 
             # Check if any function value is within tolerance
-            if abs(fx0) < tolerance_outliers:
+            if np.isclose(abs(fx0), 0, atol=tolerance_outliers):
+                logger.info(f"Lasso outlier detection converged early at iteration {ite}. fx={fx0}")
                 new = x0
                 break
-            if abs(fx1) < tolerance_outliers:
+            if np.isclose(abs(fx1), 0, atol=tolerance_outliers):
                 new = x1
+                logger.info(f"Lasso outlier detection converged early at iteration {ite}. fx={fx1}")
                 break
-            if abs(fx2) < tolerance_outliers:
+            if np.isclose(abs(fx2), 0, atol=tolerance_outliers):
                 new = x2
+                logger.info(f"Lasso outlier detection converged early at iteration {ite}. fx={fx2}")
                 break
 
             logger.debug(
@@ -736,10 +741,6 @@ class Auto_AdpQ:
             )
 
         outlier_indices, n_outlier = self._optimization_function(matrix, new)
-        logger.info(
-            f"Lasso outlier detection converged.\
-            {n_outlier / n_item * 100:.2f}% outliers found."
-        )
 
         return outlier_indices, n_outlier / n_item
 
@@ -1028,7 +1029,7 @@ class Auto_AdpQ:
                 if isinstance(module, torch.nn.Linear) and name.endswith(
                     target_suffixes
                 ):
-                    logger.info(f"Checking datatype: {name}")
+                    # logger.info(f"Checking datatype: {name}")
                     # extract weights as numpy array
                     # If Bfloat16, convert to float16 first
                     if module.weight.dtype == torch.bfloat16:
@@ -1047,31 +1048,40 @@ class Auto_AdpQ:
                     else:
                         weight_array = module.weight.detach().cpu().numpy()
 
-                    logger.info(f"Quantizing & Reconstructing layer: {name}")
+                    # logger.info(f"Quantizing & Reconstructing layer: {name}")
                     future = executor.submit(
                         quantizer.quantize_reconstruct, weight_array
                     )
                     future_to_module[future] = (name, module)
 
             # 2. COLLECTION PHASE
-            for future in as_completed(future_to_module):
-                layer_name, layer_module = future_to_module[
-                    future
-                ]  # Retrieve correct module
+            with tqdm(
+                total=len(future_to_module), 
+                desc="Loading Layer Weights", 
+                unit="layer"
+            ) as pbar:
+                for future in as_completed(future_to_module):
+                    layer_name, layer_module = future_to_module[
+                        future
+                    ]  # Retrieve correct module
 
-                try:
-                    result = future.result()
+                    try:
+                        result = future.result()
 
-                    # Convert result back to tensor
-                    original_device = layer_module.weight.device
-                    new_weight = torch.tensor(
-                        result, dtype=torch.bfloat16, device=original_device
-                    )
+                        # Convert result back to tensor
+                        original_device = layer_module.weight.device
+                        new_weight = torch.tensor(
+                            result, dtype=torch.bfloat16, device=original_device
+                        )
 
-                    # Assign to the correct module instance
-                    layer_module.weight.data = new_weight
+                        # Assign to the correct module instance
+                        layer_module.weight.data = new_weight
 
-                    logger.info(f"✅ Finished Loading: {layer_name}")
-
-                except Exception as exc:
-                    logger.error(f"❌ Exception in layer {layer_name}: {exc}")
+                    except Exception as exc:
+                        logger.error(f"❌ Exception in layer {layer_name}: {exc}")
+                        
+                    pbar.update(1)
+                    pbar.set_postfix(finished=layer_name, refresh=True)
+            
+                # pbar finalize
+                pbar.close()

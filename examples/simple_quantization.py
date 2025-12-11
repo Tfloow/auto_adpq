@@ -43,7 +43,7 @@ else:
 # Setup Auto-AdpQ configuration
 adpq_config = AutoAdpQConfig(
     group_size=group_size,
-    n_iters=30,  # Seems quite slow otherwise
+    n_iters=250,  # Throw UserWarning if too low
     alpha=0.09,
     device="cpu",
     q_bit=4,
@@ -52,7 +52,7 @@ adpq_config = AutoAdpQConfig(
 )
 
 user = "Tfloow"
-adpq_model_name = f"{user}/{model_name.split('/')[-1]}-adpq-4bit-sim-16workers"
+adpq_model_name = f"{user}/{model_name.split('/')[-1]}-adpq-4bit-sim"
 
 model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 
