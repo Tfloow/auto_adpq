@@ -5,10 +5,8 @@ from __future__ import annotations
 import logging
 import os
 import warnings
-warnings.filterwarnings("always", category=UserWarning)
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from tqdm import tqdm
 
 # replace print with logging
 from glob import glob
@@ -17,6 +15,10 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import torch
 from pydantic import BaseModel
+from tqdm import tqdm
+
+warnings.filterwarnings("always", category=UserWarning)
+
 
 # Save info and warning logs to console
 logging.basicConfig(
@@ -674,16 +676,13 @@ class Auto_AdpQ:
 
             # Check if any function value is within tolerance
             if np.isclose(abs(fx0), 0, atol=tolerance_outliers):
-                logger.info(f"Lasso outlier detection converged early at iteration {ite}. fx={fx0}")
                 new = x0
                 break
             if np.isclose(abs(fx1), 0, atol=tolerance_outliers):
                 new = x1
-                logger.info(f"Lasso outlier detection converged early at iteration {ite}. fx={fx1}")
                 break
             if np.isclose(abs(fx2), 0, atol=tolerance_outliers):
                 new = x2
-                logger.info(f"Lasso outlier detection converged early at iteration {ite}. fx={fx2}")
                 break
 
             logger.debug(
@@ -1056,9 +1055,7 @@ class Auto_AdpQ:
 
             # 2. COLLECTION PHASE
             with tqdm(
-                total=len(future_to_module), 
-                desc="Loading Layer Weights", 
-                unit="layer"
+                total=len(future_to_module), desc="Loading Layer Weights", unit="layer"
             ) as pbar:
                 for future in as_completed(future_to_module):
                     layer_name, layer_module = future_to_module[
@@ -1079,9 +1076,9 @@ class Auto_AdpQ:
 
                     except Exception as exc:
                         logger.error(f"❌ Exception in layer {layer_name}: {exc}")
-                        
+
                     pbar.update(1)
                     pbar.set_postfix(finished=layer_name, refresh=True)
-            
+
                 # pbar finalize
                 pbar.close()
