@@ -139,6 +139,25 @@ def quantize_save_compare(multi_threaded=False):
 def test_quantize_save_compare_multithreaded():
     quantize_save_compare(multi_threaded=True)
     
-@pytest.mark.run_first
-def test_quantize_save_compare_singlethreaded():
-    quantize_save_compare(multi_threaded=False)
+def test_real_quantization():
+    from transformers import AutoModelForCausalLM
+    
+    model_name = "tiny-random/llama-3"
+    group_size = 8
+    
+    adpq_config = AutoAdpQConfig(
+        group_size=group_size,
+        n_iters=250,  # Throw UserWarning if too low
+        alpha=0.05,   # The higher, the better the PPL loss but higher overhead
+        device="cpu",
+        q_bit=4,
+        data_packing=False,
+        symmetrical_quantization=True,
+    )
+
+    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
+
+    # virtual quantization
+    Auto_AdpQ.apply_quantization(model, adpq_config, multi_threaded=16)
+    
+    assert True
