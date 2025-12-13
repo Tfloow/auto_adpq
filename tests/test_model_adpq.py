@@ -140,14 +140,14 @@ def test_quantize_save_compare_multithreaded():
     quantize_save_compare(multi_threaded=True)
     
 def test_real_quantization():
-    from transformers import AutoModelForCausalLM
+
     
     model_name = "tiny-random/llama-3"
     group_size = 8
     
     adpq_config = AutoAdpQConfig(
         group_size=group_size,
-        n_iters=250,  # Throw UserWarning if too low
+        n_iters=250,
         alpha=0.05,   # The higher, the better the PPL loss but higher overhead
         device="cpu",
         q_bit=4,

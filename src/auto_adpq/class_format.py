@@ -1,7 +1,7 @@
 """Dataclasses for Auto_AdpQ configuration and quantized weights."""
 
 from dataclasses import dataclass
-from typing import Optional, Self, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from pydantic import BaseModel
@@ -61,7 +61,7 @@ class AutoAdpQConfig(BaseModel):
         if self.group_size > 2**16:
             raise ValueError("group_size too large, must be less than 65536.")
 
-    def __eq__(self, value: Self) -> bool:
+    def __eq__(self, value) -> bool:
         """Check equality for the object.
 
         Args:
