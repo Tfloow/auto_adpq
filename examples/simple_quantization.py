@@ -17,7 +17,7 @@ with open(".env", "r") as f:
             break
 
 DUMMY_LLAMA = False
-SMALL_LLAMA = True
+SMALL_LLAMA = False
 if DUMMY_LLAMA:
     model_name = "tiny-random/llama-3"  # tiny model based on llama-3 for testing
     group_size = 8
@@ -40,11 +40,14 @@ else:
     group_size = 128
 
 # START
+model_name = "meta-llama/Llama-3.1-8B-Instruct"
+group_size = 128
+ 
 # Setup Auto-AdpQ configuration
 adpq_config = AutoAdpQConfig(
     group_size=group_size,
     n_iters=250,  # Throw UserWarning if too low
-    alpha=0.09,
+    alpha=0.05,   # The higher, the better the PPL loss but higher overhead
     device="cpu",
     q_bit=4,
     data_packing=False,

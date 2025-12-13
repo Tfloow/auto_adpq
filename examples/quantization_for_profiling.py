@@ -17,7 +17,7 @@ with open(".env", "r") as f:
             break
 
 DUMMY_LLAMA = False
-SMALL_LLAMA = True
+SMALL_LLAMA = False
 if DUMMY_LLAMA:
     model_name = "tiny-random/llama-3"  # tiny model based on llama-3 for testing
     group_size = 8
@@ -38,6 +38,46 @@ else:
     else:
         model_name = save_path
     group_size = 128
+
+with open(__file__, "r") as f:
+    code_lines = f.readlines()
+    how_to_quantize = []
+    recording = False
+    for line in code_lines:
+        if line.strip() == "# START":
+            recording = True
+            continue
+        if line.strip() == "# END":
+            recording = False
+            continue
+        if recording:
+            how_to_quantize.append(line.rstrip())
+
+model_card.generate_model_card(
+    model_name="meta-llama/Llama-3.1-8B",
+    how_to_quantize="\n".join(how_to_quantize),
+)
+
+adpq_config = AutoAdpQConfig(
+    group_size=group_size,
+    n_iters=30,  # Seems quite slow otherwise
+    alpha=0.08,
+    device="cpu",
+    q_bit=4,
+    data_packing=False,
+    symmetrical_quantization=True,
+)
+
+adpq = Auto_AdpQ(config=adpq_config)
+
+
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
+
+adpq.fuse_model_from_pretrained(model, "quantized/")
+
+model.push_to_hub(f"Tfloow/{model_name.split('/')[-1]}-adpq-4bit-sim")
+
+exit()
 
 # START
 # Setup Auto-AdpQ configuration
