@@ -71,15 +71,15 @@ print(tokenizer.decode(output[0]))
 
 ### Performance
 
-| model                                          |    PPL |
-| :--------------------------------------------- | -----: |
-| unsloth/Meta-Llama-3.1-8B                      | 4.8693 |
-| unsloth/Meta-Llama-3.1-8B-bnb-4bit             | 5.0733 |
-| Tfloow/Meta-Llama-3.1-8B-weights-adpq-4bit-sim | 5.3671 |
-| ----                                           |   ---- |
-| unsloth/Meta-Llama-3.2-1B                      | 6.5546 |
-| unsloth/Meta-Llama-3.2-1B-bnb-4bit             | 6.9971 |
-| unsloth/Meta-Llama-3.2-1B-adpq                 | 7.5700 |
+| model                                          |        PPL |
+| :--------------------------------------------- | ---------: |
+| unsloth/Meta-Llama-3.1-8B                      |     4.8693 |
+| unsloth/Meta-Llama-3.1-8B-bnb-4bit             |     5.0733 |
+| Tfloow/Meta-Llama-3.1-8B-weights-adpq-4bit-sim |     5.3671 |
+| ----                                           |       ---- |
+| unsloth/Meta-Llama-3.2-1B                      |     6.5546 |
+| unsloth/Meta-Llama-3.2-1B-bnb-4bit             |     6.9971 |
+| unsloth/Meta-Llama-3.2-1B-adpq                 | **6.9491** |
 
 ### How was the model quantized?
 

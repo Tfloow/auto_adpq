@@ -55,7 +55,7 @@ adpq_config = AutoAdpQConfig(
 )
 
 user = "Tfloow"
-adpq_model_name = f"{user}/{model_name.split('/')[-1]}-adpq-4bit-sim"
+adpq_model_name = f"{user}/{model_name.split('/')[-1]}-adpq-4bit-sim-0.02"
 
 model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 
