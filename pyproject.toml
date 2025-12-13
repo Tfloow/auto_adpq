@@ -1,6 +1,6 @@
 [project]
 name = "auto_adpq"
-version = "0.3.4"
+version = "0.3.5"
 description = "Implementing auto adpq"
 authors = [
     {name = "Tfloow", email = "88899420+Tfloow@users.noreply.github.com"}

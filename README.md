@@ -1,4 +1,4 @@
-[![Docs](https://img.shields.io/badge/Docs-latest-blue?logo=readme&logoColor=f5f5f5)](https://auto-adpq.readthedocs.io/en/latest/) [![Paper](https://img.shields.io/badge/Paper-2405.13358-B31B1B?logo=arxiv&logoColor=f5f5f5)](https://arxiv.org/abs/2405.13358) [![PyPI](https://img.shields.io/badge/PyPi-0.3.4-3775A9?logo=pypi&logoColor=f5f5f5)](https://pypi.org/project/auto-adpq/)  [![HF](https://img.shields.io/badge/HuggingFace-collection-FFD21E?logo=huggingface&logoColor=f5f5f5)](https://huggingface.co/collections/Tfloow/adpq) [![CI](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml) [![Build and Release](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml) 
+[![Docs](https://img.shields.io/badge/Docs-latest-blue?logo=readme&logoColor=f5f5f5)](https://auto-adpq.readthedocs.io/en/latest/) [![Paper](https://img.shields.io/badge/Paper-2405.13358-B31B1B?logo=arxiv&logoColor=f5f5f5)](https://arxiv.org/abs/2405.13358) [![PyPI](https://img.shields.io/badge/PyPi-0.3.5-3775A9?logo=pypi&logoColor=f5f5f5)](https://pypi.org/project/auto-adpq/)  [![HF](https://img.shields.io/badge/HuggingFace-collection-FFD21E?logo=huggingface&logoColor=f5f5f5)](https://huggingface.co/collections/Tfloow/adpq) [![CI](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml) [![Build and Release](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml) 
 
 # auto_adpq
 
@@ -145,6 +145,10 @@ Pre-quantized models are available in this [collection](https://huggingface.co/c
 Nonetheless, those models represent the quality and rounding errors that a typical quantized model can meet.
 
 ### Performances
+
+![Current performance](examples/figs/ppl_vs_effective_bits.png)
+
+___
 
 <table>
     <thead>
