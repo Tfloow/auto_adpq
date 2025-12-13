@@ -4,3 +4,5 @@ furo>=2023.6.22
 numpy
 torch
 pydantic
+tqdm
+transformers
