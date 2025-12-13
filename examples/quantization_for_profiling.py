@@ -96,7 +96,6 @@ adpq = Auto_AdpQ(config=adpq_config)
 
 model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 
-print(model.dtype)
 
 quantized_model = adpq.quantize_model_multithreaded(model, max_workers=16)
 

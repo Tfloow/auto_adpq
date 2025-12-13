@@ -1023,39 +1023,43 @@ class Auto_AdpQ:
 
         logger.info(f"Starting threaded quantization with {multi_threaded} workers...")
 
-        with ThreadPoolExecutor(max_workers=multi_threaded) as executor:
-            for name, module in model.named_modules():
-                if isinstance(module, torch.nn.Linear) and name.endswith(
-                    target_suffixes
-                ):
-                    # logger.info(f"Checking datatype: {name}")
-                    # extract weights as numpy array
-                    # If Bfloat16, convert to float16 first
-                    if module.weight.dtype == torch.bfloat16:
-                        # Throw UserWarning if max value exceeds float16 range
-                        max_val = torch.max(torch.abs(module.weight)).item()
-                        if max_val > 65504:
-                            warnings.warn(
-                                f"Max weight value {max_val} exceeds float16 range. "
-                                "This may lead to overflow during conversion.",
-                                UserWarning,
-                                stacklevel=2,
+        with tqdm(desc="Preparing Layer Weights", unit="layer") as pbar:
+            with ThreadPoolExecutor(max_workers=multi_threaded) as executor:
+                for name, module in model.named_modules():
+                    if isinstance(module, torch.nn.Linear) and name.endswith(
+                        target_suffixes
+                    ):
+                        # logger.info(f"Checking datatype: {name}")
+                        # extract weights as numpy array
+                        # If Bfloat16, convert to float16 first
+                        if module.weight.dtype == torch.bfloat16:
+                            # Throw UserWarning if max value exceeds float16 range
+                            max_val = torch.max(torch.abs(module.weight)).item()
+                            if max_val > 65504:
+                                warnings.warn(
+                                    f"Max weight value {max_val} exceeds float16 range."
+                                    "This may lead to overflow during conversion.",
+                                    UserWarning,
+                                    stacklevel=2,
+                                )
+                            weight_array = (
+                                module.weight.to(torch.float16).detach().cpu().numpy()
                             )
-                        weight_array = (
-                            module.weight.to(torch.float16).detach().cpu().numpy()
-                        )
-                    else:
-                        weight_array = module.weight.detach().cpu().numpy()
+                        else:
+                            weight_array = module.weight.detach().cpu().numpy()
 
-                    # logger.info(f"Quantizing & Reconstructing layer: {name}")
-                    future = executor.submit(
-                        quantizer.quantize_reconstruct, weight_array
-                    )
-                    future_to_module[future] = (name, module)
+                        # logger.info(f"Quantizing & Reconstructing layer: {name}")
+                        future = executor.submit(
+                            quantizer.quantize_reconstruct, weight_array
+                        )
+                        future_to_module[future] = (name, module)
+                        pbar.update(1)
 
             # 2. COLLECTION PHASE
             with tqdm(
-                total=len(future_to_module), desc="Loading Layer Weights", unit="layer"
+                total=len(future_to_module),
+                desc="Quantizing Layer Weights",
+                unit="layer",
             ) as pbar:
                 for future in as_completed(future_to_module):
                     layer_name, layer_module = future_to_module[

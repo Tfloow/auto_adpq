@@ -40,9 +40,6 @@ else:
     group_size = 128
 
 # START
-model_name = "meta-llama/Llama-3.1-8B-Instruct"
-group_size = 128
- 
 # Setup Auto-AdpQ configuration
 adpq_config = AutoAdpQConfig(
     group_size=group_size,
@@ -55,11 +52,9 @@ adpq_config = AutoAdpQConfig(
 )
 
 user = "Tfloow"
-adpq_model_name = f"{user}/{model_name.split('/')[-1]}-adpq-4bit-sim-0.02"
+adpq_model_name = f"{user}/{model_name.split('/')[-1]}-adpq-4bit-sim"
 
 model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
-
-print(model.dtype)
 
 # virtual quantization
 quantized = Auto_AdpQ.apply_quantization(model, adpq_config, multi_threaded=16)

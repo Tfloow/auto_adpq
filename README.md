@@ -19,6 +19,7 @@ multi-version docs), and contribute.
     - [Building the documentation](#building-the-documentation)
   - [Tasklist](#tasklist)
   - [Quantized models](#quantized-models)
+    - [Performances](#performances)
   - [Contributing](#contributing)
   - [Development notes](#development-notes)
   - [License](#license)
@@ -143,15 +144,83 @@ Pre-quantized models are available in this [collection](https://huggingface.co/c
 
 Nonetheless, those models represent the quality and rounding errors that a typical quantized model can meet.
 
-| model                                          |        PPL |
-| :--------------------------------------------- | ---------: |
-| unsloth/Meta-Llama-3.1-8B                      |     4.8693 |
-| unsloth/Meta-Llama-3.1-8B-bnb-4bit             |     5.0733 |
-| Tfloow/Meta-Llama-3.1-8B-weights-adpq-4bit-sim |     5.3671 |
-| ----                                           |       ---- |
-| unsloth/Meta-Llama-3.2-1B                      |     6.5546 |
-| unsloth/Meta-Llama-3.2-1B-bnb-4bit             |     6.9971 |
-| unsloth/Meta-Llama-3.2-1B-adpq                 | **6.9491** |
+### Performances
+
+<table>
+    <thead>
+        <tr>
+            <th width="40%">Model Variant</th>
+            <th width="30%">Quantization Method</th>
+            <th width="30%">PPL (Perplexity)</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td rowspan="3"><strong>meta-llama/Llama-3.1-8B</strong></td>
+            <td>Baseline</td>
+            <td>4.8693</td>
+        </tr>
+        <tr>
+            <td>BNB</td>
+            <td>5.0733</td>
+        </tr>
+        <tr>
+            <td><strong>AdpQ</strong></td>
+            <td><strong>5.3671</strong></td>
+        </tr>
+        <tr>
+            <td rowspan="5"><strong>meta-llama/Llama-3.1-8B-Instruct</strong></td>
+            <td>Baseline</td>
+            <td>4.9080</td>
+        </tr>
+        <tr>
+            <td>BNB</td>
+            <td>4.9993</td>
+        </tr>
+        <tr>
+            <td><strong>AdpQ</strong></td>
+            <td><strong>5.0069</strong></td>
+        </tr>
+        <tr>
+            <td>AWQ</td>
+            <td>5.0440</td>
+        </tr>
+         <tr>
+            <td>GPTQ</td>
+            <td>nan</td>
+        </tr>
+        <tr>
+            <td rowspan="4"><strong>meta-llama/Llama-3.2-1B</strong></td>
+            <td>Baseline</td>
+            <td>6.5546</td>
+        </tr>
+        <tr>
+            <td><strong>AdpQ 9%</strong></td>
+            <td><strong>6.9491</strong></td>
+        </tr>
+        <tr>
+            <td>BNB</td>
+            <td>6.9971</td>
+        </tr>
+        <tr>
+            <td><strong>AdpQ 2%</strong></td>
+            <td><strong>7.0380</strong></td>
+        </tr>
+        <tr>
+            <td rowspan="3"><strong>meta-llama/Llama-3.2-3B-Instruct</strong></td>
+            <td>Baseline</td>
+            <td>5.7864</td>
+        </tr>
+        <tr>
+            <td>AWQ</td>
+            <td>5.8339</td>
+        </tr>
+        <tr>
+            <td><strong>AdpQ</strong></td>
+            <td><strong>5.9040</strong></td>
+        </tr>
+    </tbody>
+</table>
 
 ## Contributing
 
