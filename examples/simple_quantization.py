@@ -57,7 +57,7 @@ adpq_model_name = f"{user}/{model_name.split('/')[-1]}-adpq-4bit-sim"
 model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 
 # virtual quantization
-quantized = Auto_AdpQ.apply_quantization(model, adpq_config, multi_threaded=16)
+Auto_AdpQ.apply_quantization(model, adpq_config, multi_threaded=16)
 
 model.push_to_hub(adpq_model_name)
 # END
