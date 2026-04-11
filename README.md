@@ -1,6 +1,6 @@
 [![Docs](https://img.shields.io/badge/Docs-latest-blue?logo=readme&logoColor=f5f5f5)](https://auto-adpq.readthedocs.io/en/latest/) [![Paper](https://img.shields.io/badge/Paper-2405.13358-B31B1B?logo=arxiv&logoColor=f5f5f5)](https://arxiv.org/abs/2405.13358) [![PyPI](https://img.shields.io/badge/PyPi-0.3.5-3775A9?logo=pypi&logoColor=f5f5f5)](https://pypi.org/project/auto-adpq/)  [![HF](https://img.shields.io/badge/HuggingFace-collection-FFD21E?logo=huggingface&logoColor=f5f5f5)](https://huggingface.co/collections/Tfloow/adpq) [![CI](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/ci.yml) [![Build and Release](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml/badge.svg)](https://github.com/Tfloow/auto_adpq/actions/workflows/release.yml) 
 
-# auto_adpq
+# auto-adpq
 
 Adaptive Post-Training Quantization tooling (replicating AdpQ)
 
@@ -29,7 +29,7 @@ multi-version docs), and contribute.
 Install from PyPI (recommended):
 
 ```powershell
-python -m pip install auto_adpq
+python -m pip install auto-adpq
 ```
 
 Install the latest development version directly from GitHub:
